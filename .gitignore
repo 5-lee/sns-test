@@ -1,0 +1,44 @@
+# 가상환경
+venv/
+env/
+.env/
+.venv/
+ENV/
+
+# Python 관련 파일
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+.pytest_cache/
+
+# 운영체제 파일
+.DS_Store
+Thumbs.db
+
+# IDE 및 에디터 파일
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 환경 변수 파일
+.env
+.env.local
+.env.*.local
+
+# 로그 파일
+*.log

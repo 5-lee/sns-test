@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  SNS Slack Lambda Sample Template https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/AWS_Events.html
+
+##########################################################################
+#   Parameters
+#   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html
+##########################################################################
+Parameters:
+  DefaultName:
+    Type: String
+    Default: sns-slack
+  ServiceType:
+    Type: String
+    Default: DEV
+  PythonVersion:
+    Type: String
+    Default: python3.11
+  StageType:
+    Type: String
+    Default: latest
+
+##########################################################################
+#   Globals
+#   https://docs.aws.amazon.com/ko_kr/serverless-application-model/latest/developerguide/sam-specification-template-anatomy-globals.html
+##########################################################################
+Globals:
+  Function:
+    Runtime: !Sub ${PythonVersion}
+    MemorySize: 3072
+    Timeout: 900
+    Layers:
+      # - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:layer이름:버전(숫자)
+      - !Ref SharedLayer
+    Tags:
+      ServiceType: !Sub ${ServiceType}
+      DefaultName: !Sub ${DefaultName}
+    AutoPublishAlias: !Ref StageType
+
+Resources:
+  ##########################################################################
+  #   AWS::Serverless::LayerVersion
+  #   https://docs.aws.amazon.com/ko_kr/serverless-application-model/latest/developerguide/sam-resource-layerversion.html
+  #   AWS Lambda에서 사용할 공통 라이브러리 
+  ##########################################################################
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - !Sub ${PythonVersion}
+      ContentUri: layer
+      Description: Provides the base backend shared library and dependencies
+      LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer
+    Metadata:
+      BuildMethod: !Sub ${PythonVersion} # Required to have AWS SAM build this layer
+  ##########################################################################
+  #   AWS::Serverless::Function
+  #   https://docs.aws.amazon.com/ko_kr/serverless-application-model/latest/developerguide/sam-resource-function.html
+  #   AWS 알람 람다 
+  ##########################################################################
+  SlackAlarmLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:  !Sub ${ServiceType}-${DefaultName}-alarm-lambda
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: lambda/alarm
+      Handler: app.lambda_handler
+      Tags:
+        Name: !Sub ${ServiceType}-${DefaultName}-alarm-lambda
+        Service: !Sub ${ServiceType}
+  ########################################################################## 
+  #   AWS::Serverless::Function
+  #   https://docs.aws.amazon.com/ko_kr/serverless-application-model/latest/developerguide/sam-resource-function.html
+  #   AWS 테스트 람다 
+  ##########################################################################
+  TestLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:  !Sub ${ServiceType}-${DefaultName}-test-lambda
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: lambda/test
+      Handler: app.lambda_handler
+      Tags:
+        Name: !Sub ${ServiceType}-${DefaultName}-test-lambda
+        Service: !Sub ${ServiceType}
+  ##########################################################################
+  #   AWS::IAM::Role
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
+  #   AWS Lambda 권한 
+  ##########################################################################
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+  ##########################################################################
+  #   AWS::IAM::Policy
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy.html
+  #   AWS Lambda 정책
+  ##########################################################################
+  LambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub lambda-${ServiceType}-${DefaultName}-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: [
+              "ssm:GetParameters",
+              "ssm:GetParameter"
+            ]
+            Resource: "*"
+          - Effect: "Allow"
+            Action: [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ]
+            Resource: "*"
+      Roles:
+        - !Ref LambdaRole
+  ##########################################################################
+  #   AWS::SNS::Topic
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-properties-sns-topic.html
+  ##########################################################################
+  SlackTopic:
+    Type: AWS::SNS::Topic 
+    Properties:
+      DisplayName: !Sub ${ServiceType}-${DefaultName}-topic
+      TopicName: !Sub ${ServiceType}-${DefaultName}-topic
+      # Subscription:
+      #   - Endpoint: !GetAtt SlackAlarmLambda.Arn
+      #     Protocol: lambda
+  ##########################################################################
+  #   AWS::SNS::Subscription
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-sns-subscription.html
+  ##########################################################################
+  SubscriptionLambda:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt SlackAlarmLambda.Arn
+      Protocol: lambda
+      TopicArn: !Ref SlackTopic
+  ##########################################################################
+  #   AWS::Lambda::Permission
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-permission.html
+  #   슬랙 람다에 트리거 적용 > SNS Topic에 접속 권한 부여
+  ##########################################################################
+  AicoSlackBaseTopicPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SlackAlarmLambda
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com # Allow SNS Notifications
+      SourceArn: !Ref SlackTopic
+  ##########################################################################
+  #   AWS::CloudWatch::Alarm
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-properties-cw-alarm.html
+  #   실시간 서비스 오류 알림을 처리하기에는 부적합
+  #   인프라 측면에서 요금/자원/보안 등의 알림 설정으로는 적합
+  ##########################################################################
+  PublisherAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DependsOn: 
+      - SlackTopic
+    Properties:
+      AlarmName: !Sub ${ServiceType}-${DefaultName}-Alarm
+      AlarmDescription: "Error occurring alarm and send it to sns if greater than zero"
+      AlarmActions:
+        - !Ref SlackTopic
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref TestLambda
+      EvaluationPeriods: 1
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+  ##########################################################################
+  #   AWS::Logs::LogGroup
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-logs-loggroup.html
+  ##########################################################################
+  SlackAlarmLambdaaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SlackAlarmLambda} # Lambda name 바탕 로그 그룹 생성
+      RetentionInDays: 30 #  로그 그룹 유지 기간
+  ##########################################################################
+  #   AWS::Logs::LogGroup
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-logs-loggroup.html
+  ##########################################################################
+  TestLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${TestLambda} # Lambda name 바탕 로그 그룹 생성
+      RetentionInDays: 30 #  로그 그룹 유지 기간
