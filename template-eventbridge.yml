@@ -10,7 +10,7 @@ Description: |
 Parameters:
   DefaultName:
     Type: String
-    Default: sns-slack
+    Default: eventbridge-slack
   ServiceType:
     Type: String
     Default: DEV
@@ -20,9 +20,6 @@ Parameters:
   StageType:
     Type: String
     Default: latest
-  ExistingLambdaRoleArn:
-    Type: String
-    Description: 'arn:aws:iam::034362043522:role/lambda-DEV-sns-slack-role'
 
 ##########################################################################
 #   Globals
@@ -66,12 +63,58 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName:  !Sub ${ServiceType}-${DefaultName}-test-lambda
-      Role: !Ref ExistingLambdaRoleArn
+      Role: !GetAtt LambdaRole.Arn
       CodeUri: lambda/test
       Handler: app.lambda_handler
       Tags:
         Name: !Sub ${ServiceType}-${DefaultName}-test-lambda
         Service: !Sub ${ServiceType}
+  ##########################################################################
+  #   AWS::IAM::Role
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
+  #   AWS Lambda 권한 
+  ##########################################################################
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+  ##########################################################################
+  #   AWS::IAM::Policy
+  #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy.html
+  #   AWS Lambda 정책
+  ##########################################################################
+  LambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub lambda-${ServiceType}-${DefaultName}-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: [
+              "ssm:GetParameters",
+              "ssm:GetParameter"
+            ]
+            Resource: "*"
+          - Effect: "Allow"
+            Action: [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ]
+            Resource: "*"
+      Roles:
+        - !Ref LambdaRole
+
   ##########################################################################
   #   AWS::Events::Rule
   #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-events-rule.html
