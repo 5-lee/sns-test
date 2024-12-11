@@ -7,8 +7,8 @@ warnings.filterwarnings(action='ignore')
 
 import json
 
-from layer.common.sns_slack import slack_alarm
-from layer.common.constant import SLACK_CHANNELS, SERVICE_TYPE
+from common.sns_slack import slack_alarm
+from common.constant import SLACK_CHANNELS, SERVICE_TYPE
 
 def lambda_handler(event:dict, context:str) -> None:
   logging.info("lambda_handler!!")
