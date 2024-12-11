@@ -6,7 +6,7 @@ Description: |
 ##########################################################################
 #   Parameters
 #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html
-##########################################################################
+# 리소스에서 공통으로 사용되는 파라미터 정의
 Parameters:
   DefaultName:
     Type: String
@@ -24,26 +24,32 @@ Parameters:
 ##########################################################################
 #   Globals
 #   https://docs.aws.amazon.com/ko_kr/serverless-application-model/latest/developerguide/sam-specification-template-anatomy-globals.html
-##########################################################################
 Globals:
   Function:
+    # 런타임
     Runtime: !Sub ${PythonVersion}
+    # 메모리
     MemorySize: 3072
+    # 타임아웃
     Timeout: 900
+    # 레이어
     Layers:
       # - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:layer이름:버전(숫자)
       - !Ref SharedLayer
+    # 태그
     Tags:
       ServiceType: !Sub ${ServiceType}
       DefaultName: !Sub ${DefaultName}
+    # Lambda 함수의 자동 버전 관리 및 별칭 생성
     AutoPublishAlias: !Ref StageType
 
+# 리소스 정의 -> 정의한 만큼 빌드 폴더안에 생성이 되어야한다.
 Resources:
   ##########################################################################
   #   AWS::Serverless::LayerVersion
   #   https://docs.aws.amazon.com/ko_kr/serverless-application-model/latest/developerguide/sam-resource-layerversion.html
   #   AWS Lambda에서 사용할 공통 라이브러리 
-  ##########################################################################
+  # layer 공통 라이브러리 정의
   SharedLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -62,10 +68,10 @@ Resources:
   TestLambda:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName:  !Sub ${ServiceType}-${DefaultName}-test-lambda
-      Role: !GetAtt LambdaRole.Arn
-      CodeUri: lambda/test
-      Handler: app.lambda_handler
+      FunctionName:  !Sub ${ServiceType}-${DefaultName}-test-lambda # DEV-sns-slack-test-lambda
+      Role: !GetAtt LambdaRole.Arn # 권한을 람다함수에 부여
+      CodeUri: lambda/test # 람다 함수 코드 경로
+      Handler: app.lambda_handler # 람다 함수 핸들러 이름
       Tags:
         Name: !Sub ${ServiceType}-${DefaultName}-test-lambda
         Service: !Sub ${ServiceType}
@@ -73,7 +79,6 @@ Resources:
   #   AWS::IAM::Role
   #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
   #   AWS Lambda 권한 
-  ##########################################################################
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -91,7 +96,6 @@ Resources:
   #   AWS::IAM::Policy
   #   https://docs.aws.amazon.com/ko_kr/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy.html
   #   AWS Lambda 정책
-  ##########################################################################
   LambdaPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -113,4 +117,4 @@ Resources:
             ]
             Resource: "*"
       Roles:
-        - !Ref LambdaRole
+        - !Ref LambdaRole # 폴리시를 람다 권한에 부여

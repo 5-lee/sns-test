@@ -3,7 +3,7 @@ env:
   git-credential-helper: yes
   variables:
     # package 파라미터 정의
-    PACKAGE_S3_BUCKET: course-good593
+    PACKAGE_S3_BUCKET: 252-alram
 
 phases:
   install:
@@ -17,13 +17,13 @@ phases:
   build:
     commands:
       - echo building Source by SAM...
-      - sam build --template sns/slack/template-lambda.yml
+      - sam build --template template-lambda.yml
 
   post_build:
     commands:
       - echo package Source...
-      - sam package --s3-bucket $PACKAGE_S3_BUCKET --output-template-file outputtemplate.yml --s3-prefix build/course-aws
+      - sam package --s3-bucket $PACKAGE_S3_BUCKET --output-template-file outputtemplate.yml --s3-prefix build/test-alram
 
 artifacts:
   files:
-    - outputtemplate.yml
+    - outputtemplate.yml # 클라우드포메이션에게 전달할 파일

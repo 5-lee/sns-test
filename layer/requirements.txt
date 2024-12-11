@@ -1,3 +1,2 @@
 slack_sdk
 slack_bolt
-boto3
