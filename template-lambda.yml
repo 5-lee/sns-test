@@ -57,7 +57,7 @@ Resources:
         - !Sub ${PythonVersion}
       ContentUri: layer
       Description: Provides the base backend shared library and dependencies
-      LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer
+      LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer # DEV-sns-slack-shared-layer
     Metadata:
       BuildMethod: !Sub ${PythonVersion} # Required to have AWS SAM build this layer
   ########################################################################## 
@@ -82,7 +82,7 @@ Resources:
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
+      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role # DEV-sns-slack-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:

@@ -11,13 +11,14 @@ import warnings
 warnings.filterwarnings(action='ignore')
 
 class slack_alarm:
+  # 생성 함수
   def __init__(self, p_slack_channel:SLACK_CHANNELS):
     init_alarm()
     self.slack_channel = p_slack_channel
     self.client = WebClient(token=os.environ.get('SLACK_BOT_TOKEN', None))
-    self.thread_ts = None
+    self.thread_ts = None # 메세지 아이디 (스레드 아이디) -> 메세지가 생성되어야 알 수 있기때문에 None
 
-
+  # 메세지 전달 함수
   def __send_message(self, p_message_blocks:list[dict], p_thread_ts:str=None) -> dict:
     try:
       logging.debug(f"[slack_alarm][__send_message] START")
@@ -28,12 +29,13 @@ class slack_alarm:
         blocks=p_message_blocks,
         thread_ts=p_thread_ts
       )
-      return result
+      return result # result 는 메세지 아이디
 
     except SlackClientError as e:
       logging.error(f"[slack_alarm][__send_message] Error posting message: {e}")
 
 
+  # 서비스 메세지 아이디 조회 함수
   def get_ts_of_service_message(self, p_service_nm:str) -> str:
     logging.debug(f"[slack_alarm][get_ts_of_service_message] START")
     if self.thread_ts:
@@ -54,7 +56,7 @@ class slack_alarm:
 
     return self.thread_ts
 
-
+  # 채널 메세지 전달 함수
   def send_service_message(self, p_service_type:SERVICE_TYPE) -> str:
     logging.debug(f"[slack_alarm][send_service_message] START")
     if not isinstance(p_service_type, SERVICE_TYPE):
@@ -70,7 +72,7 @@ class slack_alarm:
     self.thread_ts = self.__send_message(p_message_blocks=message)['ts']
     return self.thread_ts
 
-
+  # 스레드 메세지 전달 함수
   def send_sub_message(self, p_service_type:SERVICE_TYPE):
     if not isinstance(p_service_type, SERVICE_TYPE):
       logging.error("[slack_alarm][send_sub_message] error of p_service_type")
@@ -85,7 +87,7 @@ class slack_alarm:
     self.thread_ts = self.__send_message(p_message_blocks=message, p_thread_ts=self.thread_ts)['ts']
     return self.thread_ts
 
-
+  # 오류 메세지 전달 함수
   def send_error_message(self, p_lambda_nm:str, p_error_msg:str):
     if not self.thread_ts:
       logging.error("[slack_alarm][send_sub_message] no thread_ts")

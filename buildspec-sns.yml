@@ -3,7 +3,7 @@ env:
   git-credential-helper: yes
   variables:
     # package 파라미터 정의
-    PACKAGE_S3_BUCKET: course-good593
+    PACKAGE_S3_BUCKET: 252-alram
 
 phases:
   install:
@@ -17,7 +17,7 @@ phases:
   build:
     commands:
       - echo building Source by SAM...
-      - sam build --template sns/slack/template-sns.yml
+      - sam build --template template-sns.yml
 
   post_build:
     commands:
