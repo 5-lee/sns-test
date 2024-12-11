@@ -23,7 +23,6 @@ phases:
     commands:
       - echo package Source...
       - sam package --s3-bucket $PACKAGE_S3_BUCKET --output-template-file outputtemplate.yml --s3-prefix build/test-alram
-      - sam deploy --template-file outputtemplate.yml --stack-name slack-sns-stack --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
 
 artifacts:
   files:
