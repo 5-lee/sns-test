@@ -1,0 +1,28 @@
+version: 0.2
+env:
+  git-credential-helper: yes
+  variables:
+    PACKAGE_S3_BUCKET: museify-monitoring
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+
+  pre_build:
+    commands:
+      - echo Build started on `date`
+
+  build:
+    commands:
+      - echo "Building SAM application..."
+      - sam build --template monitoring/template.yml
+
+  post_build:
+    commands:
+      - echo "Packaging SAM application..."
+      - sam package --s3-bucket $PACKAGE_S3_BUCKET --output-template-file outputtemplate.yml --s3-prefix monitoring
+
+artifacts:
+  files:
+    - outputtemplate.yml

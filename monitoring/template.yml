@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Monitoring System for Error, Batch, and RAG Performance
+
+Parameters:
+  DefaultName:
+    Type: String
+    Default: monitoring
+  ServiceType:
+    Type: String
+    Default: DEV
+  PythonVersion:
+    Type: String
+    Default: python3.11
+  StageType:
+    Type: String
+    Default: latest
+  RagPerformanceThreshold:
+    Type: Number
+    Default: 0.7
+    Description: Minimum acceptable RAG performance score
+
+Globals:
+  Function:
+    Runtime: !Sub ${PythonVersion}
+    MemorySize: 3072
+    Timeout: 900
+    Layers:
+      - !Ref MonitoringLayer
+    Tags:
+      ServiceType: !Sub ${ServiceType}
+      DefaultName: !Sub ${DefaultName}
+    AutoPublishAlias: !Ref StageType
+
+Resources:
+  # Layer
+  MonitoringLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - !Sub ${PythonVersion}
+      ContentUri: layer
+      Description: Monitoring system shared library and dependencies
+      LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer
+    Metadata:
+      BuildMethod: !Sub ${PythonVersion}
+
+  # SNS Topics
+  ErrorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub ${ServiceType}-${DefaultName}-error-notifications
+      TopicName: !Sub ${ServiceType}-${DefaultName}-error-topic
+
+  BatchNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub ${ServiceType}-${DefaultName}-batch-notifications
+      TopicName: !Sub ${ServiceType}-${DefaultName}-batch-topic
+
+  RagNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub ${ServiceType}-${DefaultName}-rag-notifications
+      TopicName: !Sub ${ServiceType}-${DefaultName}-rag-topic
+
+  # Lambda Functions
+  ErrorHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.error_handler
+      Environment:
+        Variables:
+          PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
+      Events:
+        CloudWatchErrorLog:
+          Type: CloudWatchLogs
+          Properties:
+            LogGroupName: /aws/applicationName/errors
+            FilterPattern: "ERROR"
+
+  BatchMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-batch-monitor
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.batch_monitor
+      Events:
+        BatchJobStateChange:
+          Type: EventBridge
+          Properties:
+            Pattern:
+              source: ["aws.batch"]
+              detail-type: ["Batch Job State Change"]
+
+  RagMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-rag-monitor
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.rag_monitor
+      Environment:
+        Variables:
+          PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
+      Events:
+        KubeflowPipelineComplete:
+          Type: EventBridge
+          Properties:
+            Pattern:
+              source: ["aws.kubeflow"]
+              detail-type: ["Pipeline Execution Completed"]
+
+  ChatbotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-chatbot
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.chatbot_handler
+      Environment:
+        Variables:
+          SLACK_APP_TOKEN: !Sub '{{resolve:ssm:/DEV/SNS/MUSEIFY/SLACK_APP_TOKEN}}'
+      Events:
+        SlackEvent:
+          Type: Api
+          Properties:
+            Path: /slack/events
+            Method: post
+
+  # IAM Role
+  MonitoringLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+
+  # IAM Policy
+  MonitoringLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub lambda-${ServiceType}-${DefaultName}-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+              - ssm:GetParameter
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - cloudwatch:PutMetricData
+              - batch:DescribeJobs
+              - eks:DescribeCluster
+              - sns:Publish
+            Resource: "*"
+      Roles:
+        - !Ref MonitoringLambdaRole
