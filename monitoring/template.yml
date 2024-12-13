@@ -38,12 +38,12 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       CompatibleRuntimes:
-        - !Sub ${PythonVersion}
+        - python3.11
       ContentUri: layer
       Description: Monitoring system shared library and dependencies
       LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer
     Metadata:
-      BuildMethod: !Sub ${PythonVersion}
+      BuildMethod: python
 
   # SNS Topics
   ErrorNotificationTopic:
@@ -69,8 +69,9 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
+      Runtime: python3.11
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: ./lambda_functions/services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.error_handler
       Environment:
         Variables:
@@ -81,6 +82,9 @@ Resources:
           Properties:
             LogGroupName: '/aws/applicationName/errors'
             FilterPattern: '[timestamp, requestid, level="ERROR", ...]'
+      Tags:
+        Name: !Sub ${ServiceType}-${DefaultName}-error-handler
+        Service: !Sub ${ServiceType}
 
   BatchMonitorFunction:
     Type: AWS::Serverless::Function
