@@ -115,19 +115,31 @@ def rag_monitor(event, context):
         logging.error(f"Error in rag_monitor: {str(e)}")
         raise 
 
+logging.getLogger().setLevel(logging.INFO)
+bot = MonitoringBot()
+
 def chatbot_handler(event, context):
     """Slack 챗봇 이벤트 핸들러"""
     try:
-        # API Gateway로부터 받은 이벤트 파싱
-        body = json.loads(event.get('body', '{}'))
-        logging.info(f"Received event: {body}")  # 디버깅을 위한 로깅 추가
+        logging.info(f"이벤트 수신: {json.dumps(event)}")
         
-        # Slack의 URL 검증 처리
-        if body.get('type') == 'url_verification':
-            return {
-                'statusCode': 200,
-                'body': json.dumps({'challenge': body.get('challenge')})
-            }
+        # URL 검증 처리
+        if "body" in event:
+            body = json.loads(event["body"])
+            if body.get("type") == "url_verification":
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({"challenge": body["challenge"]})
+                }
+        
+        # 일반 이벤트 처리
+        response = bot.handler.handle(event, context)
+        logging.info(f"응답: {json.dumps(response)}")
+        return response
+        
     except Exception as e:
-        logging.error(f"Error in chatbot_handler: {str(e)}")
-        raise e
+        logging.error(f"Error in chatbot_handler: {str(e)}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(e)})
+        }

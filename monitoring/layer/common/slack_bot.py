@@ -3,7 +3,7 @@ import logging
 import os
 from kubernetes import client, config
 from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 from .utils import init_event
 from .monitoring_details import MonitoringDetails
 from .constant import SLACK_CHANNELS
@@ -18,6 +18,14 @@ class MonitoringBot:
             token=os.environ.get("SLACK_BOT_TOKEN"),
             signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
         )
+        logging.info("Slack App 초기화 완료")
+        
+        self.handler = SlackRequestHandler(app=self.app)
+        logging.info("Slack Request Handler 초기화 완료")
+        
+        self.register_handlers()
+        logging.info("이벤트 핸들러 등록 완료")
+        
         # 허용된 채널 목록 추가
         self.allowed_channels = [
             SLACK_CHANNELS.ERROR.value[1],  # C084D1G6SJE
@@ -29,7 +37,6 @@ class MonitoringBot:
             cloudwatch_metrics_client=boto3.client('cloudwatch'),
             k8s_client=self._init_k8s_client()
         )
-        self.register_handlers()
 
     def _init_k8s_client(self):
         try:
@@ -206,14 +213,6 @@ class MonitoringBot:
             return summary
         except Exception as e:
             return f"RAG 성능 현황 조회 중 오류가 발생했습니다: {str(e)}"
-
-    def start(self):
-        """봇 시작"""
-        handler = SocketModeHandler(
-            app=self.app,
-            app_token=os.environ.get("SLACK_APP_TOKEN")
-        )
-        handler.start()
 
 if __name__ == "__main__":
     bot = MonitoringBot()
