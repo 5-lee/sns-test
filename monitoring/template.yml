@@ -64,9 +64,17 @@ Resources:
       DisplayName: !Sub ${ServiceType}-${DefaultName}-rag-notifications
       TopicName: !Sub ${ServiceType}-${DefaultName}-rag-topic
 
+  # CloudWatch Log Group 추가
+  ErrorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/${ServiceType}/errors'
+      RetentionInDays: 30
+
   # Lambda Functions
   ErrorHandlerFunction:
     Type: AWS::Serverless::Function
+    DependsOn: ErrorLogGroup
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
       Role: !GetAtt MonitoringLambdaRole.Arn
