@@ -43,7 +43,7 @@ Resources:
       Description: Monitoring system shared library and dependencies
       LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer
     Metadata:
-      BuildMethod: python
+      BuildMethod: python3.11
 
   # SNS Topics
   ErrorNotificationTopic:
@@ -64,67 +64,97 @@ Resources:
       DisplayName: !Sub ${ServiceType}-${DefaultName}-rag-notifications
       TopicName: !Sub ${ServiceType}-${DefaultName}-rag-topic
 
+  # SNS Topic Subscriptions
+  ErrorNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref ErrorNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
+
+  ErrorInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatbotFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref ErrorNotificationTopic
+
+  BatchNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BatchNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
+
+  BatchInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatbotFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref BatchNotificationTopic
+
+  RagNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref RagNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
+
+  RagInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatbotFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref RagNotificationTopic
+
   # Lambda Functions
   ErrorHandlerFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
-      Runtime: python3.11
       Role: !GetAtt MonitoringLambdaRole.Arn
       CodeUri: lambda_functions/services
       Handler: lambda_function.error_handler
-      Environment:
-        Variables:
-          PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
       Events:
         CloudWatchErrorLog:
           Type: CloudWatchLogs
           Properties:
-            LogGroupName: '/aws/applicationName/errors'
-            FilterPattern: '[timestamp, requestid, level="ERROR", ...]'
-      Tags:
-        Name: !Sub ${ServiceType}-${DefaultName}-error-handler
-        Service: !Sub ${ServiceType}
+            LogGroupName: !Sub '/aws/${ServiceType}/errors'
+            FilterPattern: 'ERROR'
 
   BatchMonitorFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-batch-monitor
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: ./lambda_functions/services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.batch_monitor
       Events:
         BatchJobStateChange:
-          Type: EventBridgeRule
+          Type: Schedule
           Properties:
-            Pattern:
-              source: ["aws.batch"]
-              detail-type: ["Batch Job State Change"]
+            Schedule: rate(5 minutes)
 
   RagMonitorFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-rag-monitor
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: ./lambda_functions/services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.rag_monitor
       Environment:
         Variables:
           PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
-      Events:
-        KubeflowPipelineComplete:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source: ["aws.kubeflow"]
-              detail-type: ["Pipeline Execution Completed"]
 
   ChatbotFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-chatbot
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: ./lambda_functions/services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.chatbot_handler
       Environment:
         Variables:
@@ -159,15 +189,10 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - ssm:GetParameters
-              - ssm:GetParameter
               - logs:CreateLogGroup
               - logs:CreateLogStream
               - logs:PutLogEvents
-              - cloudwatch:PutMetricData
-              - batch:DescribeJobs
-              - eks:DescribeCluster
-              - sns:Publish
+              - logs:FilterLogEvents
             Resource: "*"
       Roles:
         - !Ref MonitoringLambdaRole
