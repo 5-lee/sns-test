@@ -143,12 +143,7 @@ Resources:
           - Effect: "Allow"
             Action: [
               "ssm:GetParameters",
-              "ssm:GetParameter",
-              "apigateway:POST",
-              "apigateway:GET",
-              "apigateway:PUT",
-              "apigateway:DELETE",
-              "apigateway:PATCH"
+              "ssm:GetParameter"
             ]
             Resource: "*"
           - Effect: "Allow"
@@ -156,6 +151,15 @@ Resources:
               "logs:CreateLogGroup",
               "logs:CreateLogStream",
               "logs:PutLogEvents"
+            ]
+            Resource: "*"
+          - Effect: "Allow"
+            Action: [
+              "apigateway:POST",
+              "apigateway:GET",
+              "apigateway:PUT",
+              "apigateway:DELETE",
+              "apigateway:PATCH"
             ]
             Resource: "*"
       Roles:
