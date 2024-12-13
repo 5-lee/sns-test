@@ -70,7 +70,7 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.error_handler
       Environment:
         Variables:
@@ -87,7 +87,7 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-batch-monitor
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.batch_monitor
       Events:
         BatchJobStateChange:
@@ -102,7 +102,7 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-rag-monitor
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.rag_monitor
       Environment:
         Variables:
@@ -120,7 +120,7 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-chatbot
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: services
+      CodeUri: lambda_functions/services
       Handler: lambda_function.chatbot_handler
       Environment:
         Variables:

@@ -8,12 +8,15 @@ phases:
   install:
     runtime-versions:
       python: 3.11
+    commands:
+      # Layer 의존성 설치
+      - cd monitoring/layer
+      - pip install -r requirements.txt -t python
 
   pre_build:
     commands:
       - echo Build started on `date`
-      - pwd
-      - ls -la
+      - cd ../..  # 루트 디렉토리로 이동
 
   build:
     commands:
