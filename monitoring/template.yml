@@ -70,7 +70,7 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: lambda_functions/services
+      CodeUri: ./lambda_functions/services
       Handler: lambda_function.error_handler
       Environment:
         Variables:
@@ -79,19 +79,19 @@ Resources:
         CloudWatchErrorLog:
           Type: CloudWatchLogs
           Properties:
-            LogGroupName: /aws/applicationName/errors
-            FilterPattern: "ERROR"
+            LogGroupName: '/aws/applicationName/errors'
+            FilterPattern: '[timestamp, requestid, level="ERROR", ...]'
 
   BatchMonitorFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-batch-monitor
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: lambda_functions/services
+      CodeUri: ./lambda_functions/services
       Handler: lambda_function.batch_monitor
       Events:
         BatchJobStateChange:
-          Type: EventBridge
+          Type: EventBridgeRule
           Properties:
             Pattern:
               source: ["aws.batch"]
@@ -102,14 +102,14 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-rag-monitor
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: lambda_functions/services
+      CodeUri: ./lambda_functions/services
       Handler: lambda_function.rag_monitor
       Environment:
         Variables:
           PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
       Events:
         KubeflowPipelineComplete:
-          Type: EventBridge
+          Type: EventBridgeRule
           Properties:
             Pattern:
               source: ["aws.kubeflow"]
@@ -120,7 +120,7 @@ Resources:
     Properties:
       FunctionName: !Sub ${ServiceType}-${DefaultName}-chatbot
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: lambda_functions/services
+      CodeUri: ./lambda_functions/services
       Handler: lambda_function.chatbot_handler
       Environment:
         Variables:
