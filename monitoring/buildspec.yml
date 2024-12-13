@@ -12,17 +12,18 @@ phases:
   pre_build:
     commands:
       - echo Build started on `date`
-      - cd monitoring  # 작업 디렉토리 변경
+      - pwd
+      - ls -la
 
   build:
     commands:
       - echo "Building SAM application..."
-      - sam build --template template.yml
+      - sam build --template monitoring/template.yml 
 
   post_build:
     commands:
       - echo "Packaging SAM application..."
-      - sam package --s3-bucket $PACKAGE_S3_BUCKET --output-template-file ../outputtemplate.yml --s3-prefix monitoring
+      - sam package --s3-bucket $PACKAGE_S3_BUCKET --output-template-file outputtemplate.yml --s3-prefix monitoring
 
 artifacts:
   files:
