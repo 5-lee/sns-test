@@ -16,6 +16,7 @@ phases:
   pre_build:
     commands:
       - echo Build started on `date`
+      - cd ../..  # 루트 디렉토리로 이동
 
   build:
     commands:
