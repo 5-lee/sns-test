@@ -197,7 +197,7 @@ Resources:
       Roles:
         - !Ref MonitoringLambdaRole
 
-  # CloudFormation 역할에 대한 SSM 권한 추가
+    # CloudFormation 역할에 대한 SSM 권한 추가
   CloudFormationSSMPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -209,7 +209,8 @@ Resources:
             Action:
               - ssm:GetParameter
               - ssm:GetParameters
-            Resource: 
+            Resource:
               - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DEV/SNS/MUSEIFY/SLACK_APP_TOKEN
       Roles:
-        - museify-slack-cloudformation-role  # 기존 CloudFormation 역할 이름
+        - !Ref MonitoringLambdaRole
+
