@@ -38,12 +38,12 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       CompatibleRuntimes:
-        - python3.11
+        - !Sub ${PythonVersion}
       ContentUri: layer
       Description: Monitoring system shared library and dependencies
       LayerName: !Sub ${ServiceType}-${DefaultName}-shared-layer
     Metadata:
-      BuildMethod: python3.11
+      BuildMethod: !Sub ${PythonVersion}
 
   # SNS Topics
   ErrorNotificationTopic:
@@ -63,52 +63,6 @@ Resources:
     Properties:
       DisplayName: !Sub ${ServiceType}-${DefaultName}-rag-notifications
       TopicName: !Sub ${ServiceType}-${DefaultName}-rag-topic
-
-  # SNS Topic Subscriptions
-  ErrorNotificationSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref ErrorNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt ChatbotFunction.Arn
-
-  ErrorInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref ChatbotFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref ErrorNotificationTopic
-
-  BatchNotificationSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref BatchNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt ChatbotFunction.Arn
-
-  BatchInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref ChatbotFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref BatchNotificationTopic
-
-  RagNotificationSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref RagNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt ChatbotFunction.Arn
-
-  RagInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref ChatbotFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref RagNotificationTopic
 
   # Lambda Functions
   ErrorHandlerFunction:
@@ -170,47 +124,83 @@ Resources:
   MonitoringLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
+      RoleName: museify-slack-cloudformation-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: Allow
+          - Effect: "Allow"
             Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
 
   # IAM Policy
   MonitoringLambdaPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub lambda-${ServiceType}-${DefaultName}-policy
+      PolicyName: museify-slack-cloudformation-policy
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-              - logs:FilterLogEvents
+          - Effect: "Allow"
+            Action: [
+              "ssm:GetParameters",
+              "ssm:GetParameter"
+            ]
+            Resource: "*"
+          - Effect: "Allow"
+            Action: [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ]
             Resource: "*"
       Roles:
         - !Ref MonitoringLambdaRole
 
-    # CloudFormation 역할에 대한 SSM 권한 추가
-  CloudFormationSSMPolicy:
-    Type: AWS::IAM::Policy
+  # SNS Topic Subscriptions
+  ErrorNotificationSubscription:
+    Type: AWS::SNS::Subscription
     Properties:
-      PolicyName: !Sub ${ServiceType}-${DefaultName}-cfn-ssm-policy
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - ssm:GetParameter
-              - ssm:GetParameters
-            Resource:
-              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DEV/SNS/MUSEIFY/SLACK_APP_TOKEN
-      Roles:
-        - !Ref MonitoringLambdaRole
+      TopicArn: !Ref ErrorNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
 
+  ErrorInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatbotFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref ErrorNotificationTopic
+
+  BatchNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BatchNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
+
+  BatchInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatbotFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref BatchNotificationTopic
+
+  RagNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref RagNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
+
+  RagInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatbotFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref RagNotificationTopic
