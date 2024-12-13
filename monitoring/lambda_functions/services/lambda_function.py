@@ -9,7 +9,6 @@ from common.slack_bot import MonitoringBot
 from common.monitoring_details import MonitoringDetails
 
 
-
 def error_handler(event, context):
     try:
         cloudwatch = boto3.client('cloudwatch')
@@ -119,13 +118,16 @@ def rag_monitor(event, context):
 def chatbot_handler(event, context):
     """Slack 챗봇 이벤트 핸들러"""
     try:
-        bot = MonitoringBot()
-        bot.start()
+        # API Gateway로부터 받은 이벤트 파싱
+        body = json.loads(event.get('body', '{}'))
+        logging.info(f"Received event: {body}")  # 디버깅을 위한 로깅 추가
         
-        return {
-            'statusCode': 200,
-            'body': json.dumps('Chatbot started successfully')
-        }
+        # Slack의 URL 검증 처리
+        if body.get('type') == 'url_verification':
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'challenge': body.get('challenge')})
+            }
     except Exception as e:
         logging.error(f"Error in chatbot_handler: {str(e)}")
         raise e
