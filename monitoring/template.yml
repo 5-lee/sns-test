@@ -110,9 +110,6 @@ Resources:
       Role: !GetAtt MonitoringLambdaRole.Arn
       CodeUri: lambda_functions/services
       Handler: lambda_function.chatbot_handler
-      Environment:
-        Variables:
-          SLACK_APP_TOKEN: !Sub '{{resolve:ssm:/DEV/SNS/MUSEIFY/SLACK_APP_TOKEN}}'
       Events:
         SlackEvent:
           Type: Api
@@ -124,7 +121,7 @@ Resources:
   MonitoringLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: museify-slack-cloudformation-role
+      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -139,7 +136,7 @@ Resources:
   MonitoringLambdaPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: museify-slack-cloudformation-policy
+      PolicyName: !Sub lambda-${ServiceType}-${DefaultName}-policy
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
