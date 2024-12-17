@@ -37,29 +37,30 @@ class MonitoringDetails:
     def get_error_details(self, p_error_id: str) -> dict:
         try:
             start_time, end_time = self.get_time_range()
+            
+            log_group_name = p_error_id
 
-            # 로그 그룹 존재 여부 확인
             try:
                 self.cloudwatch.describe_log_groups(
-                    logGroupNamePrefix=f"/aws/lambda/{p_error_id}"
+                    logGroupNamePrefix=log_group_name
                 )
             except Exception as e:
-                logging.error(f"로그 그룹을 찾을 수 없음: /aws/lambda/{p_error_id}")
+                logging.error(f"로그 그룹을 찾을 수 없음: {log_group_name}")
                 return {
                     "stack_trace": "로그 그룹을 찾을 수 없습니다",
-                    "related_logs": f"로그 그룹 조회 실패: /aws/lambda/{p_error_id}",
+                    "related_logs": f"로그 그룹 조회 실패: {log_group_name}",
                     "error_history": "이력 조회 실패"
                 }
 
             current_logs = self.cloudwatch.filter_log_events(
-                logGroupName=f"/aws/lambda/{p_error_id}",
-                filterPattern=f"ERROR {p_error_id}",
+                logGroupName=log_group_name,
+                filterPattern=f"ERROR",
                 startTime=start_time,
                 endTime=end_time
             )
 
             error_history = self.cloudwatch.filter_log_events(
-                logGroupName=f"/aws/lambda/{p_error_id}",
+                logGroupName=log_group_name,
                 filterPattern="ERROR",
                 startTime=start_time - (7 * 24 * 60 * 60 * 1000),
                 endTime=end_time
