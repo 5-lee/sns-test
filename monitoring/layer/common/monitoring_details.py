@@ -38,7 +38,7 @@ class MonitoringDetails:
         try:
             start_time, end_time = self.get_time_range()
             
-            log_group_name = f"/aws/DEV/errors"
+            log_group_name = f"/aws/lambda/{p_error_id}"
             
             try:
                 response = self.cloudwatch.describe_log_groups(
@@ -55,19 +55,21 @@ class MonitoringDetails:
 
                 current_logs = self.cloudwatch.filter_log_events(
                     logGroupName=log_group_name,
-                    filterPattern=f'"{p_error_id}"',
-                    startTime=start_time,
-                    endTime=end_time
-                )
-
-                error_history = self.cloudwatch.filter_log_events(
-                    logGroupName=log_group_name,
                     filterPattern="ERROR",
-                    startTime=start_time - (7 * 24 * 60 * 60 * 1000),
-                    endTime=end_time
+                    startTime=start_time,
+                    endTime=end_time,
+                    limit=10
                 )
 
-                return self.format_log_response(current_logs, error_history)
+                formatted_logs = []
+                for log in current_logs.get('events', []):
+                    formatted_logs.append(f"[{datetime.fromtimestamp(log['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')}] {log['message']}")
+
+                return {
+                    "stack_trace": "\n".join(formatted_logs) if formatted_logs else "최근 에러 로그가 없습니다.",
+                    "related_logs": f"로그 그룹: {log_group_name}",
+                    "error_history": f"최근 {len(formatted_logs)}개의 에러 로그를 표시합니다."
+                }
 
             except Exception as e:
                 logging.error(f"CloudWatch API 에러: {str(e)}")
@@ -77,11 +79,11 @@ class MonitoringDetails:
                     "error_history": "이력 조회 실패"
                 }
 
-        except ClientError as e:
-            logging.error(f"CloudWatch API 에러: {str(e)}")
+        except Exception as e:
+            logging.error(f"예상치 못한 오류: {str(e)}")
             return {
                 "stack_trace": "로그 조회 실패",
-                "related_logs": f"CloudWatch API 에러: {str(e)}",
+                "related_logs": str(e),
                 "error_history": "이력 조회 실패"
             }
 
