@@ -63,7 +63,7 @@ class MonitoringDetails:
 
                 formatted_logs = []
                 for log in current_logs.get('events', []):
-                    formatted_logs.append(f"[{datetime.fromtimestamp(log['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')}] {log['message']}")
+                    formatted_logs.append(f"[{datetime.datetime.fromtimestamp(log['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')}] {log['message']}")
 
                 return {
                     "stack_trace": "\n".join(formatted_logs) if formatted_logs else "최근 에러 로그가 없습니다.",
