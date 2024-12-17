@@ -136,26 +136,36 @@ class MonitoringBot:
         def handle_error_button_click(ack, body, say):
             try:
                 ack()
-                # 디버깅용 로그
-                logging.info(f"Received body: {body}")
+                # body 전체 구조 로깅
+                logging.info("전체 body 구조:")
+                logging.info(body)
                 
-                # container가 있는 경우 (쓰레드 내부)
-                if "container" in body:
-                    thread_ts = body["container"].get("thread_ts", body["container"]["message_ts"])
-                # 일반 메시지의 경우
-                else:
-                    thread_ts = body["message"].get("thread_ts", body["message"]["ts"])
+                # 안전하게 thread_ts 추출
+                thread_ts = None
+                
+                if "message" in body:
+                    thread_ts = body["message"].get("ts")
+                elif "container" in body:
+                    thread_ts = body["container"].get("message_ts")
                     
-                logging.info(f"Using thread_ts: {thread_ts}")
+                if not thread_ts:
+                    logging.error("thread_ts를 찾을 수 없습니다")
+                    thread_ts = body.get("message", {}).get("ts")  # 마지막 시도
+                    
+                logging.info(f"추출된 thread_ts: {thread_ts}")
                 
                 error_id = body["actions"][0]["value"]
-                logging.info(f"에러 상세 조회 요청: {error_id}")
-                
                 error_details = self.monitoring_details.get_error_details(error_id)
-                say(
-                    text=f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}", 
-                    thread_ts=thread_ts
-                )
+                
+                # thread_ts가 없어도 메시지는 보내기
+                say_kwargs = {
+                    "text": f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}"
+                }
+                if thread_ts:
+                    say_kwargs["thread_ts"] = thread_ts
+                    
+                say(**say_kwargs)
+                
             except Exception as e:
                 logging.error(f"에러 상세 조회 실패: {str(e)}")
                 logging.exception("상세 에러 정보:")
@@ -220,7 +230,7 @@ class MonitoringBot:
             error_details = self.monitoring_details.get_error_details(error_id)
             
             summary = "최근 에러 현황입니다:\n\n"
-            summary += "스�� 트레이스:\n"
+            summary += "스택 트레이스:\n"
             summary += error_details["stack_trace"][:500] + "...\n\n"
             summary += "최근 에러 이력:\n"
             summary += error_details["error_history"]
