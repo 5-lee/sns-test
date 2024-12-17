@@ -111,15 +111,22 @@ bot = MonitoringBot()
 
 def chatbot_handler(event, context):
     try:
+        # 디버깅을 위한 로깅 추가
+        logging.info(f"Received event: {event}")
+        
+        # body가 문자열인 경우에만 파싱
+        body = event.get("body")
+        if isinstance(body, str):
+            body = json.loads(body)
+        elif isinstance(body, dict):
+            body = event["body"]
+        
         # URL 검증 처리 추가
-        if event.get("body"):
-            body = json.loads(event["body"])
-            # Slack의 URL 검증 요청 처리
-            if body.get("type") == "url_verification":
-                return {
-                    "statusCode": 200,
-                    "body": json.dumps({"challenge": body["challenge"]})
-                }
+        if body.get("type") == "url_verification":
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"challenge": body["challenge"]})
+            }
         
         # 기존의 봇 이벤트 처리 코드는 그대로 유지
         bot = MonitoringBot(init_k8s=False)
