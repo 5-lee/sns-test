@@ -160,7 +160,16 @@ Resources:
               - "logs:CreateLogGroup"
               - "logs:CreateLogStream"
               - "logs:PutLogEvents"
-            Resource: "*"
+              - "logs:DescribeLogGroups"
+              - "logs:DescribeLogStreams"
+              - "logs:FilterLogEvents"
+              - "logs:GetLogEvents"
+              - "logs:StartQuery"
+              - "logs:StopQuery"
+              - "logs:GetQueryResults"
+            Resource: 
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*:log-stream:*"
           - Effect: "Allow"
             Action:
               - "apigateway:POST"
@@ -174,18 +183,6 @@ Resources:
               - "sns:Publish"
               - "sns:Subscribe"
             Resource: "*"
-          - Effect: "Allow"
-            Action:
-              - "logs:FilterLogEvents"
-              - "logs:GetLogEvents"
-              - "logs:StartQuery"
-              - "logs:StopQuery"
-              - "logs:GetQueryResults"
-              - "logs:DescribeLogGroups"
-              - "logs:DescribeLogStreams"
-            Resource: 
-              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
-              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/${ServiceType}/*"
       Roles:
         - !Ref MonitoringLambdaRole
 
