@@ -31,34 +31,38 @@ class LambdaMonitoringHandler:
 
 def error_handler(event, context):
     try:
+        logging.info(f"Received event: {event}")
         handler = LambdaMonitoringHandler()
         
-        # event 구조 검증 및 에러 메시지 추출
-        error_msg = None
-        if 'detail' in event:
-            error_msg = event['detail'].get('errorMessage')
-        elif isinstance(event, dict):
-            error_msg = event.get('errorMessage') or str(event)
-        else:
-            error_msg = str(event)
-
-        # 에러 메시지 포맷팅
-        formatted_error = format_error_message(error_msg)
-        
-        # 슬랙 알림 설정 및 전송
-        slack = SlackAlarm(
-            p_slack_channel=SLACK_CHANNELS.ERROR,
-            monitoring_details=handler.setup_monitoring()
-        )
-        
-        slack.send_error_alert(
-            p_service_type=SERVICE_TYPE.DEV,
-            p_error_msg=formatted_error['error'],
-            p_error_id=context.function_name
-        )
-        
-        return handler.handle_response('Error notification sent successfully')
-        
+        try:
+            # SNS 메시지에서 알람 정보 추출
+            sup_event = json.loads(event['Records'][0]['Sns']['Message'])
+            error_msg = sup_event['AlarmDescription']
+            lambda_nm = sup_event['Trigger']['Dimensions'][0]['value']
+            service_type = lambda_nm.split("-")[0]
+            
+            # 슬랙 알림 설정 및 전송
+            slack = SlackAlarm(
+                p_slack_channel=SLACK_CHANNELS.ERROR,
+                monitoring_details=handler.setup_monitoring()
+            )
+            
+            # 서비스 메시지 처리
+            service = SERVICE_TYPE[service_type.upper()]
+            if not slack.get_ts_of_service_message(p_service_nm=service.name):
+                logging.info("send message to slack!!")
+                slack.send_service_message(p_service_type=service)
+            
+            # 에러 메시지 전송
+            logging.info("send error message to slack!!")
+            slack.send_error_message(p_lambda_nm=lambda_nm, p_error_msg=error_msg)
+            
+            return handler.handle_response('Error notification sent successfully')
+            
+        except KeyError as ke:
+            logging.error(f"Invalid event format: {ke}")
+            raise Exception(f"Invalid event format: {ke}")
+            
     except Exception as e:
         logging.error(f"Error in error_handler: {str(e)}")
         return {
