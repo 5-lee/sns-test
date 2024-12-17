@@ -136,39 +136,66 @@ class MonitoringBot:
         def handle_error_button_click(ack, body, say):
             try:
                 ack()
-                # body 전체 구조 로깅
                 logging.info("전체 body 구조:")
                 logging.info(body)
                 
-                # 안전하게 thread_ts 추출
-                thread_ts = None
-                
+                # 원본 메시지의 ts를 가져옴 (새 쓰레드의 부모가 될 메시지)
+                parent_ts = None
                 if "message" in body:
-                    thread_ts = body["message"].get("ts")  # 원본 메시지의 ts를 thread_ts로 사용
+                    parent_ts = body["message"].get("ts")
                 elif "container" in body:
-                    thread_ts = body["container"].get("message_ts")
+                    parent_ts = body["container"].get("message_ts")
                     
-                if not thread_ts:
-                    logging.error("thread_ts를 찾을 수 없습니다")
-                    thread_ts = body.get("message", {}).get("ts")  # 마지막 시도
+                if not parent_ts:
+                    logging.error("부모 메시지의 ts를 찾을 수 없습니다")
+                    raise ValueError("부모 메시지를 찾을 수 없습니다")
                     
-                logging.info(f"추출된 thread_ts: {thread_ts}")
+                logging.info(f"부모 메시지 ts: {parent_ts}")
                 
                 error_id = body["actions"][0]["value"]
                 error_details = self.monitoring_details.get_error_details(error_id)
                 
-                # thread_ts가 있을 때만 쓰레드에 메시지 전송
-                message_text = f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}"
+                # 쓰레드 메시지 블록 생성
+                thread_blocks = [
+                    {
+                        "type": "header",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "🔍 에러 상세 정보"
+                        }
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "*스택 트레이스:*\n```{}```".format(error_details['stack_trace'])
+                        }
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "*관련 로그:*\n```{}```".format(error_details['related_logs'])
+                        }
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "*이전 발생 이력:*\n{}".format(error_details['error_history'])
+                        }
+                    }
+                ]
                 
-                if thread_ts:
-                    say(text=message_text, thread_ts=thread_ts)
-                else:
-                    say(text=message_text)
+                # 쓰레드로 상세 정보 전송
+                say(
+                    blocks=thread_blocks,
+                    thread_ts=parent_ts  # 원본 메시지의 ts를 thread_ts로 사용하여 새 쓰레드 시작
+                )
                 
             except Exception as e:
                 logging.error(f"에러 상세 조회 실패: {str(e)}")
                 logging.exception("상세 에러 정보:")
-                # 에러 발생 시에는 thread_ts 없이 메시지만 전송
                 say(text=f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}")
 
         @self.app.action("view_batch_detail")
@@ -230,7 +257,7 @@ class MonitoringBot:
             # 추출된 에러 ID로 상세 정보 조회
             error_details = self.monitoring_details.get_error_details(error_id)
             
-            summary = "최근 에러 현황입니다:\n\n"
+            summary = "최근 에러 현황입니:\n\n"
             summary += "스택 트레이스:\n"
             summary += error_details["stack_trace"][:500] + "...\n\n"
             summary += "최근 에러 이력:\n"

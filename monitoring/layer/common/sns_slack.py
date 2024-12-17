@@ -96,6 +96,7 @@ class SlackAlarm:
             logging.error(f"[SlackAlarm][send_error_alert] Invalid service type: {p_service_type}")
             return
 
+        # 메인 에러 알림 메시지 전송
         message = copy.deepcopy(MESSAGE_BLOCKS.ERROR_ALERT.value[1])
         message[1]['fields'][0]['text'] = message[1]['fields'][0]['text'].format(
             service_nm=p_service_type.name
@@ -111,6 +112,17 @@ class SlackAlarm:
 
         result = self.__send_message(p_message_blocks=message)
         self.thread_ts = result['ts']
+
+        # 에러 상세 정보를 쓰레드에 바로 추가
+        error_details = self.monitoring_details.get_error_details(p_error_id)
+        thread_message = copy.deepcopy(MESSAGE_BLOCKS.ERROR_DETAIL_THREAD.value[1])
+        thread_message[0]['text']['text'] = thread_message[0]['text']['text'].format(**error_details)
+
+        self.__send_message(
+            p_message_blocks=thread_message,
+            p_thread_ts=self.thread_ts
+        )
+
         return self.thread_ts
 
     def send_batch_status(self, p_service_type: SERVICE_TYPE, p_job_name: str, p_status: str, p_job_id: str) -> str:
