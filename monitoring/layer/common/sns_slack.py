@@ -13,12 +13,23 @@ warnings.filterwarnings(action='ignore')
 
 class SlackAlarm:
     def __init__(self, p_slack_channel: SLACK_CHANNELS, monitoring_details: MonitoringDetails):
+        self.setup_slack(p_slack_channel)
+        self.monitoring_details = monitoring_details
+        
+    def setup_slack(self, p_slack_channel):
         init_alarm()
         self.slack_channel = p_slack_channel
         self.client = WebClient(token=os.environ.get('SLACK_BOT_TOKEN', None))
         self.thread_ts = None
-        self.monitoring_details = monitoring_details
-
+    
+    def create_console_url(self, service_type: str, resource_id: str) -> str:
+        url_templates = {
+            'lambda': "https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/aws/lambda/{resource}",
+            'batch': "https://ap-northeast-2.console.aws.amazon.com/batch/home?region=ap-northeast-2#jobs/detail/{resource}",
+            'kubeflow': "https://kubeflow.your-domain.com/pipeline/runs/details/{resource}"
+        }
+        return url_templates.get(service_type, '').format(resource=resource_id)
+    
     def __send_message(self, p_message_blocks: list[dict], p_thread_ts: str = None) -> dict:
         try:
             logging.debug(f"[SlackAlarm][__send_message] START")
@@ -48,6 +59,13 @@ class SlackAlarm:
                 logging.error(f"[SlackAlarm][get_ts_of_service_message] {str(e)}")
                 continue
 
+        return self.thread_ts
+
+    def send_alert(self, message_type, service_type, **kwargs):
+        message = copy.deepcopy(message_type.value[1])
+        self.format_message(message, service_type, **kwargs)
+        result = self.__send_message(p_message_blocks=message)
+        self.thread_ts = result['ts']
         return self.thread_ts
 
     def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, p_error_id: str) -> str:

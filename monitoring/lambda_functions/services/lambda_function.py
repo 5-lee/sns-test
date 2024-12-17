@@ -7,37 +7,46 @@ from common.utils import get_batch_job_details, get_rag_metrics, format_error_me
 from common.slack_bot import MonitoringBot
 from common.monitoring_details import MonitoringDetails
 
-def error_handler(event, context):
-    try:
-        cloudwatch = boto3.client('cloudwatch')
-        monitoring_details = MonitoringDetails(
-            cloudwatch_client=boto3.client('logs'),
-            batch_client=None,
-            cloudwatch_metrics_client=cloudwatch
-        )
+class LambdaMonitoringHandler:
+    def __init__(self):
+        self.cloudwatch = boto3.client('cloudwatch')
         
+    def setup_monitoring(self, batch_client=None):
+        return MonitoringDetails(
+            cloudwatch_client=boto3.client('logs'),
+            batch_client=batch_client,
+            cloudwatch_metrics_client=self.cloudwatch
+        )
+    
+    def handle_response(self, message):
+        return {
+            'statusCode': 200,
+            'body': json.dumps(message)
+        }
+    
+    def handle_error(self, e, function_name):
+        logging.error(f"Error in {function_name}: {str(e)}")
+        raise
+
+def error_handler(event, context):
+    handler = LambdaMonitoringHandler()
+    try:
+        monitoring_details = handler.setup_monitoring()
         slack = SlackAlarm(SLACK_CHANNELS.ERROR, monitoring_details)
         
         error_msg = event['detail']['errorMessage']
-        error_id = f"{context.function_name}_{context.aws_request_id}"
-        
-        # 에러 메시지 포맷팅
         formatted_error = format_error_message(error_msg, context.function_name)
         
         slack.send_error_alert(
             p_service_type=SERVICE_TYPE.DEV,
             p_error_msg=formatted_error['error'],
-            p_error_id=error_id
+            p_error_id=context.function_name  # 람다 이름 직접 사용
         )
         
-        return {
-            'statusCode': 200,
-            'body': json.dumps('Error notification sent successfully')
-        }
+        return handler.handle_response('Error notification sent successfully')
         
     except Exception as e:
-        logging.error(f"Error in error_handler: {str(e)}")
-        raise
+        handler.handle_error(e, 'error_handler')
 
 def batch_monitor(event, context):
     try:

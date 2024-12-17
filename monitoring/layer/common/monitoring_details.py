@@ -5,16 +5,39 @@ from botocore.exceptions import ClientError
 
 class MonitoringDetails:
     def __init__(self, cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client=None):
+        self.setup_clients(cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client)
+        
+    def setup_clients(self, cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client):
         self.cloudwatch = cloudwatch_client
         self.batch = batch_client
         self.cloudwatch_metrics = cloudwatch_metrics_client
         self.k8s_client = k8s_client
-
+    
+    def get_time_range(self, hours=24):
+        end_time = int(time.time() * 1000)
+        start_time = end_time - (hours * 60 * 60 * 1000)
+        return start_time, end_time
+    
+    def format_log_response(self, logs, error_history=None):
+        stack_trace = []
+        related_logs = []
+        
+        for event in logs.get('events', []):
+            if 'Traceback' in event['message']:
+                stack_trace.append(event['message'])
+            else:
+                related_logs.append(event['message'])
+                
+        return {
+            "stack_trace": "\n".join(stack_trace) if stack_trace else "스택 트레이스를 찾을 수 없습니다.",
+            "related_logs": "\n".join(related_logs) if related_logs else "관련 로그를 찾을 수 없습니다.",
+            "error_history": error_history if error_history else "이전 에러 이력이 없습니다."
+        }
+    
     def get_error_details(self, p_error_id: str) -> dict:
         try:
             lambda_name = p_error_id.split('_')[0]
-            end_time = int(time.time() * 1000)
-            start_time = end_time - (24 * 60 * 60 * 1000)  # 24시간 전
+            start_time, end_time = self.get_time_range()
 
             current_logs = self.cloudwatch.filter_log_events(
                 logGroupName=f"/aws/lambda/{lambda_name}",
@@ -23,34 +46,14 @@ class MonitoringDetails:
                 endTime=end_time
             )
 
-            stack_trace = []
-            related_logs = []
-            for event in current_logs.get('events', []):
-                if 'Traceback' in event['message']:
-                    stack_trace.append(event['message'])
-                else:
-                    related_logs.append(event['message'])
-
-            history_start = end_time - (7 * 24 * 60 * 60 * 1000)
             error_history = self.cloudwatch.filter_log_events(
                 logGroupName=f"/aws/lambda/{lambda_name}",
                 filterPattern="ERROR",
-                startTime=history_start,
+                startTime=start_time - (7 * 24 * 60 * 60 * 1000),
                 endTime=end_time
             )
 
-            formatted_history = []
-            for event in error_history.get('events', [])[:5]:
-                error_time = datetime.datetime.fromtimestamp(event['timestamp']/1000)
-                formatted_history.append(
-                    f"• {error_time.strftime('%Y-%m-%d %H:%M:%S')}: {event['message'][:100]}..."
-                )
-
-            return {
-                "stack_trace": "\n".join(stack_trace) if stack_trace else "스택 트레이스를 찾을 수 없습니다.",
-                "related_logs": "\n".join(related_logs) if related_logs else "관련 로그를 찾을 수 없습니다.",
-                "error_history": "\n".join(formatted_history) if formatted_history else "이전 에러 이력이 없습니다."
-            }
+            return self.format_log_response(current_logs, error_history)
 
         except ClientError as e:
             logging.error(f"CloudWatch API 에러: {str(e)}")
