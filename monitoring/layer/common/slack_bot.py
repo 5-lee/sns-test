@@ -136,7 +136,18 @@ class MonitoringBot:
         def handle_error_button_click(ack, body, say):
             try:
                 ack()
-                thread_ts = body["message"]["ts"]
+                # 디버깅용 로그
+                logging.info(f"Received body: {body}")
+                
+                # container가 있는 경우 (쓰레드 내부)
+                if "container" in body:
+                    thread_ts = body["container"].get("thread_ts", body["container"]["message_ts"])
+                # 일반 메시지의 경우
+                else:
+                    thread_ts = body["message"].get("thread_ts", body["message"]["ts"])
+                    
+                logging.info(f"Using thread_ts: {thread_ts}")
+                
                 error_id = body["actions"][0]["value"]
                 logging.info(f"에러 상세 조회 요청: {error_id}")
                 
@@ -147,10 +158,7 @@ class MonitoringBot:
                 )
             except Exception as e:
                 logging.error(f"에러 상세 조회 실패: {str(e)}")
-                say(
-                    text=f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}", 
-                    thread_ts=thread_ts
-                )
+                logging.exception("상세 에러 정보:")
 
         @self.app.action("view_batch_detail")
         def handle_batch_button_click(ack, body, say):
@@ -212,7 +220,7 @@ class MonitoringBot:
             error_details = self.monitoring_details.get_error_details(error_id)
             
             summary = "최근 에러 현황입니다:\n\n"
-            summary += "스택 트레이스:\n"
+            summary += "스�� 트레이스:\n"
             summary += error_details["stack_trace"][:500] + "...\n\n"
             summary += "최근 에러 이력:\n"
             summary += error_details["error_history"]
