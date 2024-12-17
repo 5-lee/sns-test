@@ -1,13 +1,11 @@
 import json
 import logging
 import boto3
-from kubernetes import client, config
 from common.sns_slack import SlackAlarm
 from common.constant import SLACK_CHANNELS, SERVICE_TYPE
 from common.utils import get_batch_job_details, get_rag_metrics, format_error_message
 from common.slack_bot import MonitoringBot
 from common.monitoring_details import MonitoringDetails
-
 
 def error_handler(event, context):
     try:
@@ -78,30 +76,23 @@ def batch_monitor(event, context):
 
 def rag_monitor(event, context):
     try:
-        # K8s 클라이언트 설정
-        config.load_incluster_config()
-        k8s_client = client.CustomObjectsApi()
-        
+        cloudwatch = boto3.client('cloudwatch')
         monitoring_details = MonitoringDetails(
             cloudwatch_client=None,
             batch_client=None,
-            cloudwatch_metrics_client=None,
-            k8s_client=k8s_client
+            cloudwatch_metrics_client=cloudwatch
         )
         
         slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
         
-        pipeline_metrics = event['detail']['metrics']
-        accuracy = float(pipeline_metrics['accuracy'])
+        # get_rag_metrics 함수를 사용하여 모든 메트릭 처리
+        metrics = get_rag_metrics(event['detail']['metrics'])
         threshold = float(event['detail']['threshold'])
         pipeline_id = event['detail']['pipelineRunId']
         
-        # RAG 메트릭 조회
-        rag_metrics = get_rag_metrics(pipeline_id, k8s_client)
-        
         slack.send_rag_performance(
             p_service_type=SERVICE_TYPE.DEV,
-            p_accuracy=accuracy,
+            p_accuracy=metrics['accuracy'],
             p_threshold=threshold,
             p_pipeline_id=pipeline_id
         )

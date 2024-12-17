@@ -2,7 +2,6 @@ import os
 import boto3
 import logging
 from datetime import datetime
-from kubernetes import client
 from .constant import SLACK_TOKENS 
 
 def __set_environ(p_slack_token:SLACK_TOKENS):
@@ -52,18 +51,9 @@ def get_batch_job_details(job_id: str) -> dict:
         logging.error(f"Batch 작업 정보 조회 실패: {str(e)}")
         return {}
 
-def get_rag_metrics(pipeline_run_id: str, k8s_client: client.CustomObjectsApi) -> dict:
-    """RAG 파이프라인 메트릭 조회"""
+def get_rag_metrics(metrics: dict) -> dict:
+    """RAG 파이프라인 메트릭 처리"""
     try:
-        pipeline_run = k8s_client.get_namespaced_custom_object(
-            group="pipelines.kubeflow.org",
-            version="v1beta1",
-            namespace="kubeflow",
-            plural="pipelineruns",
-            name=pipeline_run_id
-        )
-        
-        metrics = pipeline_run.get('status', {}).get('metrics', {})
         return {
             'accuracy': float(metrics.get('accuracy', 0)),
             'precision': float(metrics.get('precision', 0)),
@@ -72,7 +62,7 @@ def get_rag_metrics(pipeline_run_id: str, k8s_client: client.CustomObjectsApi) -
             'mrr': float(metrics.get('mrr', 0))
         }
     except Exception as e:
-        logging.error(f"RAG 메트릭 조회 실패: {str(e)}")
+        logging.error(f"RAG 메트릭 조리 실패: {str(e)}")
         return {}
 
 def format_error_message(error_msg: str, service_name: str) -> dict:
