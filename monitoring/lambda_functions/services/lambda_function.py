@@ -123,39 +123,30 @@ def chatbot_handler(event, context):
     try:
         logging.info(f"Received event: {event}")
         
-        # body 처리 로직 수정
+        # body 처리
         body = event.get("body", "")
         
-        if body:
-            # URL 디코딩 후 payload 파라미터 추출
+        # 1. URL 검증 요청 처리 (body가 이미 JSON 문자열인 경우)
+        try:
+            if isinstance(body, str):
+                body = json.loads(body)
+            if body.get("type") == "url_verification":
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({"challenge": body.get("challenge", "")})
+                }
+        except json.JSONDecodeError:
+            pass  # URL 인코딩된 payload일 수 있으므로 계속 진행
+        
+        # 2. payload 파라미터 처리 (버튼 액션 등)
+        if isinstance(body, str) and 'payload=' in body:
             decoded_body = urllib.parse.unquote(body)
-            if decoded_body.startswith('payload='):
-                payload_json = decoded_body[8:]  # 'payload=' 제거
-                body = json.loads(payload_json)
-            else:
-                logging.error(f"Unexpected body format: {decoded_body}")
-                body = {}
+            payload_json = decoded_body.split('payload=')[1]
+            body = json.loads(payload_json)
         
-        # URL 검증 처리
-        if body.get("type") == "url_verification":
-            return {
-                "statusCode": 200,
-                "body": json.dumps({"challenge": body.get("challenge", "")})
-            }
-        
-        # 슬랙 액션 처리
-        if body.get("type") == "block_actions":
-            action = body.get("actions", [{}])[0]
-            action_id = action.get("action_id")
-            value = action.get("value")
-            
-            bot = MonitoringBot(init_k8s=False)
-            return bot.handler.handle_action(action_id, value)
-        
-        return {
-            "statusCode": 200,
-            "body": json.dumps({"message": "Processed successfully"})
-        }
+        # 기존의 봇 이벤트 처리
+        bot = MonitoringBot(init_k8s=False)
+        return bot.handler.handle(event, context)
         
     except Exception as e:
         logging.error(f"Error in chatbot_handler: {str(e)}")
