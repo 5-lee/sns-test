@@ -38,11 +38,17 @@ def error_handler(event, context):
             # SNS 메시지에서 알람 정보 추출
             sup_event = json.loads(event['Records'][0]['Sns']['Message'])
             error_msg = sup_event['AlarmDescription']
-            lambda_nm = sup_event['Trigger']['Dimensions'][0]['value']  # 실제 에러가 발생한 Lambda 함수 이름
-            service_type = lambda_nm.split("-")[0]
+            lambda_nm = sup_event['Trigger']['Dimensions'][0]['value']
+            
+            # 서비스 타입 결정 로직 수정
+            if lambda_nm.startswith('DEV-'):
+                service = SERVICE_TYPE.LAMBDA  # 기본값으로 LAMBDA 사용
+            else:
+                service_type = lambda_nm.split("-")[0]
+                service = SERVICE_TYPE[service_type.upper()]
             
             # CloudWatch 로그 그룹 경로 설정
-            log_group_path = f"/aws/lambda/{lambda_nm}"  # 원본 Lambda의 로그 그룹
+            log_group_path = f"/aws/lambda/{lambda_nm}"
             
             # 슬랙 알림 설정 및 전송
             slack = SlackAlarm(
@@ -51,18 +57,17 @@ def error_handler(event, context):
             )
             
             # 서비스 메시지 처리
-            service = SERVICE_TYPE[service_type.upper()]
             if not slack.get_ts_of_service_message(p_service_nm=service.name):
                 logging.info("send message to slack!!")
                 slack.send_service_message(p_service_type=service)
             
-            # 에러 메시지 전송 (로그 그룹 경로 포함)
+            # 에러 메시지 전송
             logging.info("send error message to slack!!")
             slack.send_error_alert(
                 p_service_type=service,
                 p_error_msg=error_msg,
                 p_error_id=lambda_nm,
-                p_log_group=log_group_path  # 로그 그룹 경로 전달
+                p_log_group=log_group_path
             )
             
             return handler.handle_response('Error notification sent successfully')
