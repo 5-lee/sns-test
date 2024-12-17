@@ -12,7 +12,7 @@ import warnings
 warnings.filterwarnings(action='ignore')
 
 class MonitoringBot:
-    def __init__(self):
+    def __init__(self, init_k8s=False):
         init_event()
         self.app = App(
             token=os.environ.get("SLACK_BOT_TOKEN"),
@@ -31,11 +31,15 @@ class MonitoringBot:
             SLACK_CHANNELS.ERROR.value[1],  # C084D1G6SJE
             SLACK_CHANNELS.ALARM.value[1]   # C084FGGMNS0
         ]
+        
+        # K8s 클라이언트 초기화를 선택적으로 수행
+        k8s_client = self._init_k8s_client() if init_k8s else None
+        
         self.monitoring_details = MonitoringDetails(
             cloudwatch_client=boto3.client('logs'),
             batch_client=boto3.client('batch'),
             cloudwatch_metrics_client=boto3.client('cloudwatch'),
-            k8s_client=self._init_k8s_client()
+            k8s_client=k8s_client
         )
 
     def _init_k8s_client(self):

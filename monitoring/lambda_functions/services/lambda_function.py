@@ -110,26 +110,23 @@ logging.getLogger().setLevel(logging.INFO)
 bot = MonitoringBot()
 
 def chatbot_handler(event, context):
-    """Slack 챗봇 이벤트 핸들러"""
     try:
-        logging.info(f"이벤트 수신: {json.dumps(event)}")
-        
-        # URL 검증 처리
-        if "body" in event:
+        # URL 검증 처리 추가
+        if event.get("body"):
             body = json.loads(event["body"])
+            # Slack의 URL 검증 요청 처리
             if body.get("type") == "url_verification":
                 return {
                     "statusCode": 200,
                     "body": json.dumps({"challenge": body["challenge"]})
                 }
         
-        # 일반 이벤트 처리
-        response = bot.handler.handle(event, context)
-        logging.info(f"응답: {json.dumps(response)}")
-        return response
+        # 기존의 봇 이벤트 처리 코드는 그대로 유지
+        bot = MonitoringBot(init_k8s=False)
+        return bot.handler.handle(event, context)
         
     except Exception as e:
-        logging.error(f"Error in chatbot_handler: {str(e)}", exc_info=True)
+        logging.error(f"Error in chatbot_handler: {str(e)}")
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})
