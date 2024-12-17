@@ -40,12 +40,8 @@ def error_handler(event, context):
             error_msg = sup_event['AlarmDescription']
             lambda_nm = sup_event['Trigger']['Dimensions'][0]['value']
             
-            # 서비스 타입 결정 로직 수정
-            if lambda_nm.startswith('DEV-'):
-                service = SERVICE_TYPE.LAMBDA  # 기본값으로 LAMBDA 사용
-            else:
-                service_type = lambda_nm.split("-")[0]
-                service = SERVICE_TYPE[service_type.upper()]
+            # 서비스 타입을 DEV로 통일
+            service = SERVICE_TYPE.DEV
             
             # CloudWatch 로그 그룹 경로 설정
             log_group_path = f"/aws/lambda/{lambda_nm}"
@@ -132,7 +128,6 @@ def rag_monitor(event, context):
         
         slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
         
-        # get_rag_metrics 함수를 사용하여 모든 메트릭 처리
         metrics = get_rag_metrics(event['detail']['metrics'])
         threshold = float(event['detail']['threshold'])
         pipeline_id = event['detail']['pipelineRunId']
