@@ -144,7 +144,7 @@ class MonitoringBot:
                 thread_ts = None
                 
                 if "message" in body:
-                    thread_ts = body["message"].get("ts")
+                    thread_ts = body["message"].get("ts")  # 원본 메시지의 ts를 thread_ts로 사용
                 elif "container" in body:
                     thread_ts = body["container"].get("message_ts")
                     
@@ -157,22 +157,19 @@ class MonitoringBot:
                 error_id = body["actions"][0]["value"]
                 error_details = self.monitoring_details.get_error_details(error_id)
                 
-                # thread_ts가 없어도 메시지는 보내기
-                say_kwargs = {
-                    "text": f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}"
-                }
+                # thread_ts가 있을 때만 쓰레드에 메시지 전송
+                message_text = f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}"
+                
                 if thread_ts:
-                    say_kwargs["thread_ts"] = thread_ts
-                    
-                say(**say_kwargs)
+                    say(text=message_text, thread_ts=thread_ts)
+                else:
+                    say(text=message_text)
                 
             except Exception as e:
                 logging.error(f"에러 상세 조회 실패: {str(e)}")
                 logging.exception("상세 에러 정보:")
-                error_message = {
-                    "text": f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}"
-                }
-                say(**error_message)
+                # 에러 발생 시에는 thread_ts 없이 메시지만 전송
+                say(text=f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}")
 
         @self.app.action("view_batch_detail")
         def handle_batch_button_click(ack, body, say):
