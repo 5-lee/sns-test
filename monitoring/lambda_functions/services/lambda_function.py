@@ -30,24 +30,44 @@ class LambdaMonitoringHandler:
         raise
 
 def error_handler(event, context):
-    handler = LambdaMonitoringHandler()
     try:
-        monitoring_details = handler.setup_monitoring()
-        slack = SlackAlarm(SLACK_CHANNELS.ERROR, monitoring_details)
+        handler = LambdaMonitoringHandler()
         
-        error_msg = event['detail']['errorMessage']
-        formatted_error = format_error_message(error_msg, context.function_name)
+        # event 구조 검증 및 에러 메시지 추출
+        error_msg = None
+        if 'detail' in event:
+            error_msg = event['detail'].get('errorMessage')
+        elif isinstance(event, dict):
+            error_msg = event.get('errorMessage') or str(event)
+        else:
+            error_msg = str(event)
+
+        # 에러 메시지 포맷팅
+        formatted_error = format_error_message(error_msg)
+        
+        # 슬랙 알림 설정 및 전송
+        slack = SlackAlarm(
+            p_slack_channel=SLACK_CHANNELS.ERROR,
+            monitoring_details=handler.setup_monitoring()
+        )
         
         slack.send_error_alert(
             p_service_type=SERVICE_TYPE.DEV,
             p_error_msg=formatted_error['error'],
-            p_error_id=context.function_name  # 람다 이름 직접 사용
+            p_error_id=context.function_name
         )
         
         return handler.handle_response('Error notification sent successfully')
         
     except Exception as e:
-        handler.handle_error(e, 'error_handler')
+        logging.error(f"Error in error_handler: {str(e)}")
+        return {
+            "statusCode": 500,
+            "body": json.dumps({
+                "error": str(e),
+                "message": "에러 처리 중 문제가 발생했습니다."
+            })
+        }
 
 def batch_monitor(event, context):
     try:
