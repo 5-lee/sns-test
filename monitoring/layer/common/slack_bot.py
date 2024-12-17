@@ -92,7 +92,7 @@ class MonitoringBot:
                                 "type": "plain_text",
                                 "text": "에러 현황"
                             },
-                            "action_id": "view_error_details",
+                            "action_id": "view_error_detail",
                             "value": "error_details"
                         },
                         {
@@ -101,7 +101,7 @@ class MonitoringBot:
                                 "type": "plain_text",
                                 "text": "배치 작업 현황"
                             },
-                            "action_id": "view_batch_details",
+                            "action_id": "view_batch_detail",
                             "value": "batch_details"
                         },
                         {
@@ -110,7 +110,7 @@ class MonitoringBot:
                                 "type": "plain_text",
                                 "text": "RAG 성능 현황"
                             },
-                            "action_id": "view_rag_details",
+                            "action_id": "view_rag_detail",
                             "value": "rag_details"
                         }
                     ]
@@ -132,7 +132,7 @@ class MonitoringBot:
                 )
 
         # 버튼 액션 핸들러
-        @self.app.action("view_error_details")
+        @self.app.action("view_error_detail")
         def handle_error_button_click(ack, body, say):
             ack()
             thread_ts = body["message"]["thread_ts"]
@@ -140,13 +140,13 @@ class MonitoringBot:
             say(text=f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}", 
                 thread_ts=thread_ts)
 
-        @self.app.action("view_batch_details")
+        @self.app.action("view_batch_detail")
         def handle_batch_button_click(ack, body, say):
             ack()
             thread_ts = body["message"]["thread_ts"]
             say(text=self.get_batch_summary(), thread_ts=thread_ts)
 
-        @self.app.action("view_rag_details")
+        @self.app.action("view_rag_detail")
         def handle_rag_button_click(ack, body, say):
             ack()
             thread_ts = body["message"]["thread_ts"]

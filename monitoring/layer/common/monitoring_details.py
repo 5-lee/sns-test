@@ -36,14 +36,6 @@ class MonitoringDetails:
     
     def get_error_details(self, p_error_id: str) -> dict:
         try:
-            # 테스트용 더미 응답
-            if p_error_id == "DEV-monitoring-error-handler":
-                return {
-                    "stack_trace": "TypeError: Cannot read property 'value' of undefined\n    at Handler.processMessage (/var/task/index.js:42:35)",
-                    "related_logs": "2024-02-16T02:30:00.123Z ERROR Error processing message\n2024-02-16T02:30:00.124Z ERROR Request failed",
-                    "error_history": "최근 7일간 발생한 에러 이력이 없습니다."
-                }
-
             start_time, end_time = self.get_time_range()
 
             # 로그 그룹 존재 여부 확인
