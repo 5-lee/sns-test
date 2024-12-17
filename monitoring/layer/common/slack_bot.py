@@ -136,7 +136,9 @@ class MonitoringBot:
         def handle_error_button_click(ack, body, say):
             ack()
             thread_ts = body["message"]["thread_ts"]
-            error_details = self.monitoring_details.get_error_details("DEV-monitoring")  # 또는 적절한 Lambda 이름
+            error_id = body["actions"][0]["value"]
+            
+            error_details = self.monitoring_details.get_error_details(error_id)
             say(text=f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}", 
                 thread_ts=thread_ts)
 
