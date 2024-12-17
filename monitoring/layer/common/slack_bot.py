@@ -169,6 +169,11 @@ class MonitoringBot:
             except Exception as e:
                 logging.error(f"에러 상세 조회 실패: {str(e)}")
                 logging.exception("상세 에러 정보:")
+                # 에러 발생 시에도 메시지는 보내기
+                error_message = {
+                    "text": f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}"
+                }
+                say(**error_message)
 
         @self.app.action("view_batch_detail")
         def handle_batch_button_click(ack, body, say):
