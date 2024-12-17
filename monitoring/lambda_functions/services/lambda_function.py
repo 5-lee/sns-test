@@ -43,8 +43,8 @@ def error_handler(event, context):
             # 서비스 타입을 DEV로 통일
             service = SERVICE_TYPE.DEV
             
-            # CloudWatch 로그 그룹 경로 설정
-            log_group_path = f"/aws/lambda/{error_id}"
+            # CloudWatch 로그 그룹 경로는 template.yml과 일치하게 설정
+            log_group_path = f"/aws/{service.name}/errors"
             
             # 슬랙 알림 설정 및 전송
             slack = SlackAlarm(

@@ -27,7 +27,9 @@ class SlackAlarm:
         if not isinstance(service_type, SERVICE_TYPE) or service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
             logging.error(f"[SlackAlarm][create_console_url] Invalid service type: {service_type}")
             return ""
-        return f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/$252Faws$252Flambda$252F{resource_id}"
+        # URL 인코딩된 로그 그룹 경로 사용
+        encoded_path = f"/aws/{service_type.name}/errors"
+        return f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/{encoded_path}"
     
     def __send_message(self, p_message_blocks: list[dict], p_thread_ts: str = None) -> dict:
         try:
@@ -88,6 +90,7 @@ class SlackAlarm:
 
     def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, p_error_id: str, p_log_group: str) -> str:
         """에러 알림 전송"""
+        logging.info(f"Sending error alert - Service: {p_service_type}, Error ID: {p_error_id}, Log Group: {p_log_group}")
         logging.debug(f"[SlackAlarm][send_error_alert] START")
         if not isinstance(p_service_type, SERVICE_TYPE) or p_service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
             logging.error(f"[SlackAlarm][send_error_alert] Invalid service type: {p_service_type}")

@@ -38,35 +38,44 @@ class MonitoringDetails:
         try:
             start_time, end_time = self.get_time_range()
             
-            log_group_name = p_error_id
-
+            log_group_name = f"/aws/DEV/errors"
+            
             try:
-                self.cloudwatch.describe_log_groups(
+                response = self.cloudwatch.describe_log_groups(
                     logGroupNamePrefix=log_group_name
                 )
+                
+                if not response.get('logGroups'):
+                    logging.error(f"로그 그룹을 찾을 수 없음: {log_group_name}")
+                    return {
+                        "stack_trace": "로그 그룹을 찾을 수 없습니다",
+                        "related_logs": f"로그 그룹이 존재하지 않음: {log_group_name}",
+                        "error_history": "이력 조회 실패"
+                    }
+
+                current_logs = self.cloudwatch.filter_log_events(
+                    logGroupName=log_group_name,
+                    filterPattern=f'"{p_error_id}"',
+                    startTime=start_time,
+                    endTime=end_time
+                )
+
+                error_history = self.cloudwatch.filter_log_events(
+                    logGroupName=log_group_name,
+                    filterPattern="ERROR",
+                    startTime=start_time - (7 * 24 * 60 * 60 * 1000),
+                    endTime=end_time
+                )
+
+                return self.format_log_response(current_logs, error_history)
+
             except Exception as e:
-                logging.error(f"로그 그룹을 찾을 수 없음: {log_group_name}")
+                logging.error(f"CloudWatch API 에러: {str(e)}")
                 return {
-                    "stack_trace": "로그 그룹을 찾을 수 없습니다",
-                    "related_logs": f"로그 그룹 조회 실패: {log_group_name}",
+                    "stack_trace": "로그 조회 실패",
+                    "related_logs": f"CloudWatch API 에러: {str(e)}",
                     "error_history": "이력 조회 실패"
                 }
-
-            current_logs = self.cloudwatch.filter_log_events(
-                logGroupName=log_group_name,
-                filterPattern=f"ERROR",
-                startTime=start_time,
-                endTime=end_time
-            )
-
-            error_history = self.cloudwatch.filter_log_events(
-                logGroupName=log_group_name,
-                filterPattern="ERROR",
-                startTime=start_time - (7 * 24 * 60 * 60 * 1000),
-                endTime=end_time
-            )
-
-            return self.format_log_response(current_logs, error_history)
 
         except ClientError as e:
             logging.error(f"CloudWatch API 에러: {str(e)}")
@@ -175,5 +184,5 @@ class MonitoringDetails:
                 "f1_score": "0.00",
                 "mrr": "0.00",
                 "failed_queries": f"성능 데이터 조회 실패: {str(e)}",
-                "improvement_suggestions": "데이터 조회 실패로 제안할 수 없습니다."
+                "improvement_suggestions": "데이터 회 실패로 제안할 수 없습니다."
             }
