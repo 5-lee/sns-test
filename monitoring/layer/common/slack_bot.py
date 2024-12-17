@@ -134,13 +134,23 @@ class MonitoringBot:
         # 버튼 액션 핸들러
         @self.app.action("view_error_detail")
         def handle_error_button_click(ack, body, say):
-            ack()
-            thread_ts = body["message"]["thread_ts"]
-            error_id = body["actions"][0]["value"]
-            
-            error_details = self.monitoring_details.get_error_details(error_id)
-            say(text=f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}", 
-                thread_ts=thread_ts)
+            try:
+                ack()
+                thread_ts = body["message"]["thread_ts"]
+                error_id = body["actions"][0]["value"]
+                logging.info(f"에러 상세 조회 요청: {error_id}")
+                
+                error_details = self.monitoring_details.get_error_details(error_id)
+                say(
+                    text=f"최근 에러 현황입니다:\n\n{error_details['stack_trace']}\n\n{error_details['error_history']}", 
+                    thread_ts=thread_ts
+                )
+            except Exception as e:
+                logging.error(f"에러 상세 조회 실패: {str(e)}")
+                say(
+                    text=f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}", 
+                    thread_ts=thread_ts
+                )
 
         @self.app.action("view_batch_detail")
         def handle_batch_button_click(ack, body, say):
@@ -230,7 +240,7 @@ class MonitoringBot:
             summary += f"\n소요 시간:\n"
             summary += f"• 추출: {batch_details['extract_time']}초\n"
             summary += f"• 변환: {batch_details['transform_time']}초\n"
-            summary += f"• 적재: {batch_details['load_time']}초"
+            summary += f"�� 적재: {batch_details['load_time']}초"
             
             return summary
         except Exception as e:
@@ -258,7 +268,7 @@ class MonitoringBot:
             
             return summary
         except Exception as e:
-            return f"RAG 성능 현황 조회 중 오류가 발생했습니다: {str(e)}"
+            return f"RAG 성능 현황 조�� 중 오류가 발생했습니다: {str(e)}"
 
 if __name__ == "__main__":
     bot = MonitoringBot()
