@@ -38,13 +38,13 @@ def error_handler(event, context):
             # SNS 메시지에서 알람 정보 추출
             sup_event = json.loads(event['Records'][0]['Sns']['Message'])
             error_msg = sup_event['AlarmDescription']
-            lambda_nm = sup_event['Trigger']['Dimensions'][0]['value']
+            error_id = sup_event['Trigger']['Dimensions'][0]['value']
             
             # 서비스 타입을 DEV로 통일
             service = SERVICE_TYPE.DEV
             
             # CloudWatch 로그 그룹 경로 설정
-            log_group_path = f"/aws/lambda/{lambda_nm}"
+            log_group_path = f"/aws/lambda/{error_id}"
             
             # 슬랙 알림 설정 및 전송
             slack = SlackAlarm(
@@ -62,7 +62,7 @@ def error_handler(event, context):
             slack.send_error_alert(
                 p_service_type=service,
                 p_error_msg=error_msg,
-                p_error_id=lambda_nm,
+                p_error_id=error_id,
                 p_log_group=log_group_path
             )
             

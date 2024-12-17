@@ -61,10 +61,17 @@ class SlackAlarm:
         return self.thread_ts
 
     def send_service_message(self, p_service_type: SERVICE_TYPE) -> str:
-        """서비스 메시지 전송"""
+        """서비스 메시지 전송
+        
+        Args:
+            p_service_type: 서비스 타입 (LAMBDA, BATCH, RAG)
+        
+        Returns:
+            str: 메시지 타임스탬프
+        """
         logging.debug(f"[SlackAlarm][send_service_message] START")
-        if not isinstance(p_service_type, SERVICE_TYPE) or p_service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
-            logging.error(f"[SlackAlarm][send_service_message] Invalid service type: {p_service_type}")
+        if not isinstance(p_service_type, SERVICE_TYPE):
+            logging.error("[SlackAlarm][send_service_message] error of p_service_type")
             return
 
         message = copy.deepcopy(MESSAGE_BLOCKS.SERVICE.value[1])
@@ -146,8 +153,8 @@ class SlackAlarm:
         self.thread_ts = result['ts']
         return self.thread_ts
 
-    # 쓰레드 메시지 전송 메서드들은 service_type을 사용하지 않으므로 수정하지 않음
     def send_error_detail_thread(self, p_error_id: str) -> str:
+        """에러 상세 정보 쓰레드 전송"""
         if not self.thread_ts:
             logging.error("[SlackAlarm][send_error_detail_thread] no thread_ts")
             return
