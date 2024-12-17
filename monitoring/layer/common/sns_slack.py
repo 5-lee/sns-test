@@ -22,11 +22,11 @@ class SlackAlarm:
         self.client = WebClient(token=os.environ.get('SLACK_BOT_TOKEN', None))
         self.thread_ts = None
     
-    def create_console_url(self, service_type: str, resource_id: str) -> str:
+    def create_console_url(self, service_type: SERVICE_TYPE, resource_id: str) -> str:
         url_templates = {
-            'lambda': "https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/aws/lambda/{resource}",
-            'batch': "https://ap-northeast-2.console.aws.amazon.com/batch/home?region=ap-northeast-2#jobs/detail/{resource}",
-            'kubeflow': "https://kubeflow.your-domain.com/pipeline/runs/details/{resource}"
+            SERVICE_TYPE.LAMBDA: "https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/$252Faws$252Flambda$252F{resource}",
+            SERVICE_TYPE.BATCH: "https://ap-northeast-2.console.aws.amazon.com/batch/home?region=ap-northeast-2#jobs/detail/{resource}",
+            SERVICE_TYPE.RAG: "https://kubeflow.your-domain.com/pipeline/runs/details/{resource}"
         }
         return url_templates.get(service_type, '').format(resource=resource_id)
     
@@ -86,8 +86,8 @@ class SlackAlarm:
         )
         message[3]['elements'][0]['value'] = p_error_id
         
-        # CloudWatch 로그 링크 수정
-        message[3]['elements'][1]['url'] = f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/{p_log_group}"
+        # CloudWatch 로그 링크 수정 - $252F로 인코딩된 경로 사용
+        message[3]['elements'][1]['url'] = self.create_console_url(p_service_type, p_error_id)
 
         result = self.__send_message(p_message_blocks=message)
         self.thread_ts = result['ts']
