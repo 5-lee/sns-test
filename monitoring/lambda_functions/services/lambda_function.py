@@ -53,9 +53,13 @@ def error_handler(event, context):
                 logging.info("send message to slack!!")
                 slack.send_service_message(p_service_type=service)
             
-            # 에러 메시지 전송
+            # 에러 메시지 전송 (메서드 이름 변경)
             logging.info("send error message to slack!!")
-            slack.send_error_message(p_lambda_nm=lambda_nm, p_error_msg=error_msg)
+            slack.send_error_alert(
+                p_service_type=service,
+                p_error_msg=error_msg,
+                p_error_id=lambda_nm
+            )
             
             return handler.handle_response('Error notification sent successfully')
             
