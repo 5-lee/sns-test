@@ -68,7 +68,7 @@ class SlackAlarm:
         self.thread_ts = result['ts']
         return self.thread_ts
 
-    def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, p_error_id: str) -> str:
+    def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, p_error_id: str, p_log_group: str) -> str:
         logging.debug(f"[SlackAlarm][send_error_alert] START")
         if not isinstance(p_service_type, SERVICE_TYPE):
             logging.error("[SlackAlarm][send_error_alert] error of p_service_type")
@@ -86,10 +86,8 @@ class SlackAlarm:
         )
         message[3]['elements'][0]['value'] = p_error_id
         
-        # CloudWatch 로그 링크 추가
-        lambda_name = p_error_id.split('_')[0]
-        cloudwatch_url = f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/aws/lambda/{lambda_name}"
-        message[3]['elements'][1]['url'] = cloudwatch_url
+        # CloudWatch 로그 링크 수정
+        message[3]['elements'][1]['url'] = f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/{p_log_group}"
 
         result = self.__send_message(p_message_blocks=message)
         self.thread_ts = result['ts']
