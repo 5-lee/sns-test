@@ -6,6 +6,7 @@ from common.constant import SLACK_CHANNELS, SERVICE_TYPE
 from common.utils import get_batch_job_details, get_rag_metrics, format_error_message
 from common.slack_bot import MonitoringBot
 from common.monitoring_details import MonitoringDetails
+import urllib.parse
 
 class LambdaMonitoringHandler:
     def __init__(self):
@@ -120,30 +121,48 @@ bot = MonitoringBot()
 
 def chatbot_handler(event, context):
     try:
-        # 디버깅을 위한 로깅 추가
         logging.info(f"Received event: {event}")
         
-        # body가 문자열인 경우에만 파싱
-        body = event.get("body")
-        if isinstance(body, str):
-            body = json.loads(body)
-        elif isinstance(body, dict):
-            body = event["body"]
+        # body 처리 로직 수정
+        body = event.get("body", "")
         
-        # URL 검증 처리 추가
+        if body:
+            # URL 디코딩 후 payload 파라미터 추출
+            decoded_body = urllib.parse.unquote(body)
+            if decoded_body.startswith('payload='):
+                payload_json = decoded_body[8:]  # 'payload=' 제거
+                body = json.loads(payload_json)
+            else:
+                logging.error(f"Unexpected body format: {decoded_body}")
+                body = {}
+        
+        # URL 검증 처리
         if body.get("type") == "url_verification":
             return {
                 "statusCode": 200,
-                "body": json.dumps({"challenge": body["challenge"]})
+                "body": json.dumps({"challenge": body.get("challenge", "")})
             }
         
-        # 기존의 봇 이벤트 처리 코드는 그대로 유지
-        bot = MonitoringBot(init_k8s=False)
-        return bot.handler.handle(event, context)
+        # 슬랙 액션 처리
+        if body.get("type") == "block_actions":
+            action = body.get("actions", [{}])[0]
+            action_id = action.get("action_id")
+            value = action.get("value")
+            
+            bot = MonitoringBot(init_k8s=False)
+            return bot.handler.handle_action(action_id, value)
+        
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"message": "Processed successfully"})
+        }
         
     except Exception as e:
         logging.error(f"Error in chatbot_handler: {str(e)}")
         return {
             "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
+            "body": json.dumps({
+                "error": str(e),
+                "message": "요청 처리 중 오류가 발생했습니다."
+            })
         }
