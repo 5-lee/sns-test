@@ -36,7 +36,7 @@ class MonitoringDetails:
     
     def get_error_details(self, p_error_id: str) -> dict:
         try:
-            lambda_name = p_error_id.split('_')[0]
+            lambda_name = p_error_id
             start_time, end_time = self.get_time_range()
 
             current_logs = self.cloudwatch.filter_log_events(
