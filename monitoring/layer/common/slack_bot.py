@@ -1,6 +1,8 @@
 import boto3
+from botocore.exceptions import ClientError
 import logging
 import os
+import time
 from kubernetes import client, config
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
@@ -158,21 +160,57 @@ class MonitoringBot:
                 handle_mention(body, say)
 
     def get_error_summary(self) -> str:
-        """최근 에러 현황 조회"""
         try:
-            # 가장 최근 에러 ID 조회 (실제 구현 필요)
-            recent_error_id = "recent_error_id"
-            error_details = self.monitoring_details.get_error_details(recent_error_id)
+            end_time = int(time.time() * 1000)
+            start_time = end_time - (24 * 60 * 60 * 1000)
+            
+            log_groups = [
+                "/aws/lambda/DEV-monitoring-batch-monitor",
+                "/aws/lambda/DEV-monitoring-chatbot",
+                "/aws/lambda/DEV-monitoring-error-handler",
+                "/aws/lambda/DEV-monitoring-rag-monitor",
+            ]
+            
+            all_errors = []
+            for log_group in log_groups:
+                logs = self.monitoring_details.cloudwatch.filter_log_events(
+                    logGroupName=log_group,
+                    filterPattern="ERROR",
+                    startTime=start_time,
+                    endTime=end_time,
+                    limit=1
+                )
+                if logs.get('events'):
+                    all_errors.extend(logs['events'])
+            
+            if not all_errors:
+                logging.info("최근 24시간 동안 발생한 에러가 없습니다.")
+                raise ValueError("No errors found")
+            
+            # 타임스탬프로 정렬하여 가장 최근 에러 사용
+            recent_error = sorted(all_errors, key=lambda x: x['timestamp'], reverse=True)[0]
+            error_message = recent_error['message']
+            
+            # 에러 ID 추출 로직 (예: "ERROR my_lambda_error_123" 형식 가정)
+            error_id = error_message.split('ERROR ')[-1].split()[0]
+            
+            # 추출된 에러 ID로 상세 정보 조회
+            error_details = self.monitoring_details.get_error_details(error_id)
             
             summary = "최근 에러 현황입니다:\n\n"
             summary += "스택 트레이스:\n"
-            summary += error_details["stack_trace"][:500] + "...\n\n"  # 길이 제한
+            summary += error_details["stack_trace"][:500] + "...\n\n"
             summary += "최근 에러 이력:\n"
             summary += error_details["error_history"]
             
             return summary
+        except ClientError as e:
+            logging.error(f"CloudWatch API 접근 오류: {e}")
+            raise
+        
         except Exception as e:
-            return f"에러 현황 조회 중 오류가 발생했습니다: {str(e)}"
+            logging.error(f"예상치 못한 오류 발생: {e}")
+            raise
 
     def get_batch_summary(self) -> str:
         """배치 작업 현황 조회"""
