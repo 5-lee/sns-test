@@ -66,7 +66,7 @@ class MonitoringBot:
         @self.app.event("app_mention")
         def handle_mention(body, say):
             log_action("handle_mention", "Received mention event")
-            logging.info("멘��� 이벤트 수신됨")
+            logging.info("멘 이벤트 수신됨")
             logging.info(f"이벤트 내용: {body}")
             
             event = body["event"]
@@ -140,36 +140,34 @@ class MonitoringBot:
         @self.app.action("view_error_detail")
         def handle_error_button_click(ack, body, say):
             ack()
-            error_id = body["actions"][0]["value"]
-            error_details = self.monitoring_details.get_error_details(error_id)
-            blocks = MessageBlockBuilder.create_error_blocks(...)
-            say(blocks=blocks, thread_ts=thread_ts)
+            try:
+                error_id = body["actions"][0]["value"]
+                thread_ts = body["message"]["thread_ts"] if "thread_ts" in body["message"] else body["message"]["ts"]
+                
+                error_details = self.monitoring_details.get_error_details(error_id)
+                thread_blocks = MessageBlockBuilder.create_error_detail_blocks(error_details)
+                
+                say(blocks=thread_blocks, thread_ts=thread_ts)
+                
+            except Exception as e:
+                logging.error(f"에러 상세 조회 실패: {str(e)}")
+                say(text=f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}", thread_ts=thread_ts)
 
         @self.app.action("view_batch_detail")
-        def handle_view_batch_detail(ack, body, say):
+        def handle_batch_button_click(ack, body, say):
             ack()
             try:
                 batch_job_id = body["actions"][0]["value"]
                 thread_ts = body["message"]["thread_ts"] if "thread_ts" in body["message"] else body["message"]["ts"]
                 
-                # 배치 작업 상세 정보 조회
                 batch_details = self.monitoring_details.get_batch_details(batch_job_id)
+                thread_blocks = MessageBlockBuilder.create_batch_detail_blocks(batch_details)
                 
-                blocks = MessageBlockBuilder.create_batch_blocks(
-                    service_type=SERVICE_TYPE.DEV,  # 현재 컨텍스트의 서비스 타입
-                    job_name=batch_details['job_name'],
-                    status=batch_details['status'],
-                    job_id=batch_job_id
-                )
-                
-                say(blocks=blocks, thread_ts=thread_ts)
+                say(blocks=thread_blocks, thread_ts=thread_ts)
                 
             except Exception as e:
                 logging.error(f"배치 작업 상세 정보 조회 실패: {str(e)}")
-                say(
-                    text="배치 작업 상세 정보를 조회하는 중 오류가 발생했습니다.",
-                    thread_ts=thread_ts
-                )
+                say(text=f"배치 작업 상세 정보를 조회하는 중 오류가 발생했습니다: {str(e)}", thread_ts=thread_ts)
 
         @self.app.action("view_rag_detail")
         def handle_rag_button_click(ack, body, say):
@@ -179,22 +177,13 @@ class MonitoringBot:
                 thread_ts = body["message"]["thread_ts"] if "thread_ts" in body["message"] else body["message"]["ts"]
                 
                 rag_details = self.monitoring_details.get_rag_details(pipeline_id)
+                thread_blocks = MessageBlockBuilder.create_rag_detail_blocks(rag_details)
                 
-                blocks = MessageBlockBuilder.create_rag_blocks(
-                    service_type=SERVICE_TYPE.DEV,
-                    accuracy=float(rag_details['accuracy']),
-                    threshold=float(rag_details['threshold']),
-                    pipeline_id=pipeline_id
-                )
-                
-                say(blocks=blocks, thread_ts=thread_ts)
+                say(blocks=thread_blocks, thread_ts=thread_ts)
                 
             except Exception as e:
                 logging.error(f"RAG 성능 상세 정보 조회 실패: {str(e)}")
-                say(
-                    text="RAG 성능 상세 정보를 조회하는 중 오류가 발생했습니다.",
-                    thread_ts=thread_ts
-                )
+                say(text=f"RAG 성능 상세 정보를 조회하는 중 오류가 발생했습니다: {str(e)}", thread_ts=thread_ts)
 
         @self.app.event("message")
         def handle_message_events(body, logger, say):

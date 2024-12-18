@@ -117,7 +117,11 @@ class SlackAlarm:
                 error_time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             )
             result = self.__send_message(blocks)
-            return result.get('ts')
+            self.thread_ts = result.get('ts')
+            
+            # 바로 상세 정보 쓰레드 전송
+            self.send_error_detail_thread(p_error_id)
+            return self.thread_ts
             
         except Exception as e:
             logging.error(f"[SlackAlarm][send_error_alert] Error: {str(e)}")
@@ -134,7 +138,11 @@ class SlackAlarm:
                 job_id=p_job_id
             )
             result = self.__send_message(blocks)
-            return result.get('ts')
+            self.thread_ts = result.get('ts')
+            
+            # 바로 상세 정보 쓰레드 전송
+            self.send_batch_detail_thread(p_job_id)
+            return self.thread_ts
             
         except Exception as e:
             logging.error(f"[SlackAlarm][send_batch_status] Error: {str(e)}")
@@ -151,23 +159,25 @@ class SlackAlarm:
                 pipeline_id=p_pipeline_id
             )
             result = self.__send_message(blocks)
-            return result.get('ts')
+            self.thread_ts = result.get('ts')
+            
+            # 바로 상세 정보 쓰레드 전송
+            self.send_rag_detail_thread(p_pipeline_id)
+            return self.thread_ts
             
         except Exception as e:
             logging.error(f"[SlackAlarm][send_rag_performance] Error: {str(e)}")
             raise
 
     def send_error_detail_thread(self, p_error_id: str) -> str:
-        """에러 상세 정보 쓰레드 전송"""
         if not self.thread_ts:
             logging.error("[SlackAlarm][send_error_detail_thread] no thread_ts")
             return
 
         error_details = self.monitoring_details.get_error_details(p_error_id)
-        message = copy.deepcopy(MESSAGE_BLOCKS.ERROR_DETAIL_THREAD.value[1])
-        message[0]['text']['text'] = message[0]['text']['text'].format(**error_details)
-
-        result = self.__send_message(p_message_blocks=message, p_thread_ts=self.thread_ts)
+        thread_blocks = MessageBlockBuilder.create_error_detail_blocks(error_details)
+        
+        result = self.__send_message(thread_blocks, self.thread_ts)
         return result['ts']
 
     def send_batch_detail_thread(self, p_job_id: str) -> str:
@@ -176,10 +186,9 @@ class SlackAlarm:
             return
 
         batch_details = self.monitoring_details.get_batch_details(p_job_id)
-        message = copy.deepcopy(MESSAGE_BLOCKS.BATCH_DETAIL_THREAD.value[1])
-        message[0]['text']['text'] = message[0]['text']['text'].format(**batch_details)
-
-        result = self.__send_message(p_message_blocks=message, p_thread_ts=self.thread_ts)
+        thread_blocks = MessageBlockBuilder.create_batch_detail_blocks(batch_details)
+        
+        result = self.__send_message(thread_blocks, self.thread_ts)
         return result['ts']
 
     def send_rag_detail_thread(self, p_pipeline_id: str) -> str:
@@ -188,10 +197,9 @@ class SlackAlarm:
             return
 
         rag_details = self.monitoring_details.get_rag_details(p_pipeline_id)
-        message = copy.deepcopy(MESSAGE_BLOCKS.RAG_DETAIL_THREAD.value[1])
-        message[0]['text']['text'] = message[0]['text']['text'].format(**rag_details)
-
-        result = self.__send_message(p_message_blocks=message, p_thread_ts=self.thread_ts)
+        thread_blocks = MessageBlockBuilder.create_rag_detail_blocks(rag_details)
+        
+        result = self.__send_message(thread_blocks, self.thread_ts)
         return result['ts']
 
     def handle_action(self, action_id: str, value: str) -> None:

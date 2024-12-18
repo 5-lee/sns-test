@@ -1,6 +1,13 @@
 class MessageBlockBuilder:
     @staticmethod
     def create_error_blocks(service_type, error_msg, error_id, error_time):
+        # 에러 로그는 /aws/DEV/errors 사용
+        log_group_path = f"/aws/{service_type.name}/errors"
+        cloudwatch_url = (
+            f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?"
+            f"region=ap-northeast-2#logsV2:log-groups/log-group/{log_group_path}$3Ffilter$3DERROR{error_id}"
+        )
+        
         return [
             {
                 "type": "header",
@@ -47,7 +54,7 @@ class MessageBlockBuilder:
                             "type": "plain_text",
                             "text": "CloudWatch"
                         },
-                        "url": f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/aws/{service_type.name}/errors",
+                        "url": cloudwatch_url,
                         "action_id": "view_cloudwatch"
                     }
                 ]
@@ -57,6 +64,12 @@ class MessageBlockBuilder:
     @staticmethod
     def create_batch_blocks(service_type, job_name, status, job_id):
         status_emoji = "✅" if status == "SUCCEEDED" else "❌" if status == "FAILED" else "🔄"
+        # 배치와 RAG는 /aws/lambda/DEV-monitoring 사용
+        log_group_path = "aws/lambda/DEV-monitoring"
+        cloudwatch_url = (
+            f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?"
+            f"region=ap-northeast-2#logsV2:log-groups/log-group/{log_group_path}$3Ffilter$3D{job_id}"
+        )
         return [
             {
                 "type": "header",
@@ -109,7 +122,7 @@ class MessageBlockBuilder:
                             "type": "plain_text",
                             "text": "AWS Batch"
                         },
-                        "url": f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/aws/lambda/DEV-monitoring",
+                        "url": cloudwatch_url,
                         "action_id": "view_batch_console"
                     }
                 ]
@@ -119,6 +132,11 @@ class MessageBlockBuilder:
     @staticmethod
     def create_rag_blocks(service_type, accuracy, threshold, pipeline_id):
         status_emoji = "✅" if accuracy >= threshold else "⚠️"
+        # Kubeflow UI URL로 변경
+        kubeflow_url = (
+            f"https://kubeflow.your-domain.com/pipeline/#/runs/details/{pipeline_id}"
+        )
+        
         return [
             {
                 "type": "header",
@@ -169,11 +187,95 @@ class MessageBlockBuilder:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "CloudWatch"
+                            "text": "Kubeflow"
                         },
-                        "url": f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/aws/lambda/DEV-monitoring",
-                        "action_id": "view_cloudwatch"
+                        "url": kubeflow_url,
+                        "action_id": "view_kubeflow"
                     }
                 ]
+            }
+        ]
+
+    @staticmethod
+    def create_error_detail_blocks(error_details):
+        return [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🔍 에러 상세 정보"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*스택 트레이스:*\n```{error_details['stack_trace']}```"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*관련 로그:*\n```{error_details['related_logs']}```"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*이전 발생 이력:*\n{error_details['error_history']}"
+                }
+            }
+        ]
+
+    @staticmethod
+    def create_batch_detail_blocks(batch_details):
+        return [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🔍 배치 작업 상세 정보"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*처리 통계:*\n"
+                           f"• 총 처리 건수: {batch_details['total_processed']}\n"
+                           f"• 성공: {batch_details['success_count']}\n"
+                           f"• 실패: {batch_details['fail_count']}\n\n"
+                           f"*소요 시간:*\n"
+                           f"• 추출: {batch_details['extract_time']}초\n"
+                           f"• 변환: {batch_details['transform_time']}초\n"
+                           f"• 적재: {batch_details['load_time']}초"
+                }
+            }
+        ]
+
+    @staticmethod
+    def create_rag_detail_blocks(rag_details):
+        return [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🔍 RAG 성능 상세 정보"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*성능 지표:*\n"
+                           f"• Precision: {rag_details['precision']}\n"
+                           f"• Recall: {rag_details['recall']}\n"
+                           f"• F1 Score: {rag_details['f1_score']}\n"
+                           f"• MRR: {rag_details['mrr']}\n\n"
+                           f"*실패한 쿼리:*\n{rag_details['failed_queries']}\n\n"
+                           f"*개선 제안사항:*\n{rag_details['improvement_suggestions']}"
+                }
             }
         ] 

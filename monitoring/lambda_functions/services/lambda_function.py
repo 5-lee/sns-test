@@ -237,3 +237,21 @@ def handle_error_event(event, context):
     except KeyError as ke:
         logging.error(f"Invalid event format: {ke}")
         raise Exception(f"Invalid event format: {ke}")
+
+def handle_rag_metrics(event, context):
+    # Kubeflow에서 실행된 RAG 파이프라인의 성능 지표를 받아서 처리
+    pipeline_id = event['pipeline_id']
+    metrics = event['metrics']  # Precision, Recall, F1, MRR 등
+    
+    # 성능이 임계값 미달이면 알림 전송
+    if metrics['accuracy'] < THRESHOLD:
+        slack_alarm = SlackAlarm(
+            SLACK_CHANNELS.ALARM,
+            MonitoringDetails()
+        )
+        slack_alarm.send_rag_performance(
+            SERVICE_TYPE.DEV,
+            metrics['accuracy'],
+            THRESHOLD,
+            pipeline_id
+        )
