@@ -28,6 +28,10 @@ def get_cloudwatch_logs(log_group: str, query: str, start_time: int, end_time: i
     """CloudWatch 로그 조회 유틸리티"""
     try:
         logs_client = boto3.client('cloudwatch-logs')
+        # 로그 그룹이 지정되지 않은 경우 기본값 사용
+        if not log_group:
+            log_group = "/aws/DEV/errors"
+            
         response = logs_client.filter_log_events(
             logGroupName=log_group,
             filterPattern=query,
