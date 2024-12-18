@@ -276,8 +276,3 @@ class MESSAGE_BLOCKS(enum.Enum):
             }
         }
     ], "RAG 성능 상세 분석 쓰레드")
-
-class CLOUDWATCH_DASHBOARDS(Enum):
-    RAG_PERFORMANCE = ("RAG_PERFORMANCE", "RAG-Performance-Dashboard")
-    BATCH_METRICS = ("BATCH_METRICS", "Batch-Metrics-Dashboard")
-    ERROR_METRICS = ("ERROR_METRICS", "Error-Metrics-Dashboard")

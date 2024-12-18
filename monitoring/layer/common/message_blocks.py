@@ -64,11 +64,10 @@ class MessageBlockBuilder:
     @staticmethod
     def create_batch_blocks(service_type, job_name, status, job_id):
         status_emoji = "✅" if status == "SUCCEEDED" else "❌" if status == "FAILED" else "🔄"
-        # 배치와 RAG는 /aws/lambda/DEV-monitoring 사용
-        log_group_path = "aws/lambda/DEV-monitoring"
-        cloudwatch_url = (
-            f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?"
-            f"region=ap-northeast-2#logsV2:log-groups/log-group/{log_group_path}$3Ffilter$3D{job_id}"
+        # AWS Batch 콘솔 URL
+        batch_console_url = (
+            f"https://ap-northeast-2.console.aws.amazon.com/batch/home?"
+            f"region=ap-northeast-2#jobs/detail/{job_id}"
         )
         return [
             {
@@ -122,7 +121,7 @@ class MessageBlockBuilder:
                             "type": "plain_text",
                             "text": "AWS Batch"
                         },
-                        "url": cloudwatch_url,
+                        "url": batch_console_url,
                         "action_id": "view_batch_console"
                     }
                 ]
@@ -132,7 +131,7 @@ class MessageBlockBuilder:
     @staticmethod
     def create_rag_blocks(service_type, accuracy, threshold, pipeline_id):
         status_emoji = "✅" if accuracy >= threshold else "⚠️"
-        # Kubeflow UI URL로 변경
+        # Kubeflow UI URL
         kubeflow_url = (
             f"https://kubeflow.your-domain.com/pipeline/#/runs/details/{pipeline_id}"
         )
