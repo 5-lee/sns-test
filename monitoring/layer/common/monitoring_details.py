@@ -2,9 +2,47 @@ import logging
 import time
 import datetime
 from botocore.exceptions import ClientError
+import boto3
 
 def handle_api_error(func_name: str, error: Exception, default_return: any = None):
-    logging.error(f"Error in {func_name}: {str(error)}")
+    error_message = f"Error in {func_name}: {str(error)}"
+    error_id = f"error-{func_name.lower()}-{int(time.time())}"
+    
+    # 기본 Lambda 로그에 기록
+    logging.error(error_message)
+    
+    try:
+        # /aws/DEV/errors 로그 그룹에도 기록
+        cloudwatch = boto3.client('logs')
+        log_group = '/aws/DEV/errors'
+        
+        # 로그 그룹이 없으면 생성
+        try:
+            cloudwatch.create_log_group(logGroupName=log_group)
+        except cloudwatch.exceptions.ResourceAlreadyExistsException:
+            pass
+            
+        # 로그 스트림 생성 및 로그 기록
+        try:
+            cloudwatch.create_log_stream(
+                logGroupName=log_group,
+                logStreamName=error_id
+            )
+            
+            cloudwatch.put_log_events(
+                logGroupName=log_group,
+                logStreamName=error_id,
+                logEvents=[{
+                    'timestamp': int(time.time() * 1000),
+                    'message': error_message
+                }]
+            )
+        except Exception as e:
+            logging.error(f"Failed to write to error log group: {str(e)}")
+            
+    except Exception as e:
+        logging.error(f"Failed to setup error logging: {str(e)}")
+        
     return default_return
 
 class MonitoringDetails:
@@ -94,7 +132,18 @@ class MonitoringDetails:
         try:
             job_response = self.batch.describe_jobs(jobs=[p_job_id])
             if not job_response['jobs']:
-                raise ValueError(f"배치 작업을 찾을 수 없음: {p_job_id}")
+                return handle_api_error(
+                    'get_batch_details', 
+                    ValueError(f"배치 작업을 찾을 수 없음: {p_job_id}"),
+                    {
+                        "total_processed": 0,
+                        "success_count": 0,
+                        "fail_count": 1,
+                        "extract_time": 0,
+                        "transform_time": 0,
+                        "load_time": 0
+                    }
+                )
             
             job = job_response['jobs'][0]
             
@@ -126,15 +175,14 @@ class MonitoringDetails:
             }
             
         except Exception as e:
-            logging.error(f"배치 작업 정보 조회 실패: {str(e)}")
-            return {
+            return handle_api_error('get_batch_details', e, {
                 "total_processed": 0,
                 "success_count": 0,
                 "fail_count": 1,
                 "extract_time": 0,
                 "transform_time": 0,
                 "load_time": 0
-            }
+            })
 
     def get_rag_details(self, p_pipeline_id: str) -> dict:
         try:
