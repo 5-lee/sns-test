@@ -42,7 +42,7 @@ class MonitoringDetails:
         try:
             start_time, end_time = self.get_time_range()
             
-            log_group_name = f"/aws/lambda/{p_error_id}"
+            log_group_name = "/aws/DEV/errors"
             
             try:
                 response = self.cloudwatch.describe_log_groups(
@@ -59,7 +59,7 @@ class MonitoringDetails:
 
                 current_logs = self.cloudwatch.filter_log_events(
                     logGroupName=log_group_name,
-                    filterPattern="ERROR",
+                    filterPattern=f"ERROR {p_error_id}",
                     startTime=start_time,
                     endTime=end_time,
                     limit=10
