@@ -75,32 +75,28 @@ Resources:
     Type: AWS::Serverless::Function
     DependsOn: ErrorLogGroup
     Properties:
-      FunctionName: !Sub ${ServiceType}-${DefaultName}-monitoring
+      FunctionName: !Sub ${ServiceType}-monitoring
       Role: !GetAtt MonitoringLambdaRole.Arn
       CodeUri: lambda_functions/services
       Handler: lambda_function.handler
+      Environment:
+        Variables:
+          PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
       Events:
-        # Slack API 엔드포인트
         SlackEvent:
           Type: Api
           Properties:
             Path: /slack/events
             Method: post
-        
-        # Batch 모니터링
         BatchJobStateChange:
           Type: Schedule
           Properties:
             Schedule: rate(5 minutes)
-        
-        # CloudWatch 에러 로그
         CloudWatchErrorLog:
           Type: CloudWatchLogs
           Properties:
             LogGroupName: !Sub '/aws/${ServiceType}/errors'
             FilterPattern: 'ERROR'
-        
-        # RAG 성능 모니터링 (EventBridge 규칙)
         RagPerformanceMonitor:
           Type: EventBridgeRule
           Properties:
@@ -173,12 +169,12 @@ Resources:
     Properties:
       TopicArn: !Ref ErrorNotificationTopic
       Protocol: lambda
-      Endpoint: !GetAtt ChatbotFunction.Arn
+      Endpoint: !GetAtt MonitoringFunction.Arn
 
   ErrorInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ChatbotFunction
+      FunctionName: !Ref MonitoringFunction
       Action: lambda:InvokeFunction
       Principal: sns.amazonaws.com
       SourceArn: !Ref ErrorNotificationTopic
@@ -188,12 +184,12 @@ Resources:
     Properties:
       TopicArn: !Ref BatchNotificationTopic
       Protocol: lambda
-      Endpoint: !GetAtt ChatbotFunction.Arn
+      Endpoint: !GetAtt MonitoringFunction.Arn
 
   BatchInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ChatbotFunction
+      FunctionName: !Ref MonitoringFunction
       Action: lambda:InvokeFunction
       Principal: sns.amazonaws.com
       SourceArn: !Ref BatchNotificationTopic
@@ -203,12 +199,12 @@ Resources:
     Properties:
       TopicArn: !Ref RagNotificationTopic
       Protocol: lambda
-      Endpoint: !GetAtt ChatbotFunction.Arn
+      Endpoint: !GetAtt MonitoringFunction.Arn
 
   RagInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ChatbotFunction
+      FunctionName: !Ref MonitoringFunction
       Action: lambda:InvokeFunction
       Principal: sns.amazonaws.com
       SourceArn: !Ref RagNotificationTopic
