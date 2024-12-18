@@ -118,9 +118,6 @@ class SlackAlarm:
             )
             result = self.__send_message(blocks)
             self.thread_ts = result.get('ts')
-            
-            # 바로 상세 정보 쓰레드 전송
-            self.send_error_detail_thread(p_error_id)
             return self.thread_ts
             
         except Exception as e:
@@ -139,9 +136,6 @@ class SlackAlarm:
             )
             result = self.__send_message(blocks)
             self.thread_ts = result.get('ts')
-            
-            # 바로 상세 정보 쓰레드 전송
-            self.send_batch_detail_thread(p_job_id)
             return self.thread_ts
             
         except Exception as e:
@@ -160,9 +154,6 @@ class SlackAlarm:
             )
             result = self.__send_message(blocks)
             self.thread_ts = result.get('ts')
-            
-            # 바로 상세 정보 쓰레드 전송
-            self.send_rag_detail_thread(p_pipeline_id)
             return self.thread_ts
             
         except Exception as e:
@@ -202,9 +193,12 @@ class SlackAlarm:
         result = self.__send_message(thread_blocks, self.thread_ts)
         return result['ts']
 
-    def handle_action(self, action_id: str, value: str) -> None:
+    def handle_action(self, action_id: str, value: str, thread_ts: str = None) -> None:
         """슬랙 버튼 액션 처리"""
         logging.debug(f"[SlackAlarm][handle_action] START action_id: {action_id}")
+        
+        # thread_ts 설정
+        self.thread_ts = thread_ts
         
         if action_id == SLACK_ACTIONS.VIEW_ERROR_DETAIL.value:
             return self.send_error_detail_thread(value)

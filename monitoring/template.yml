@@ -160,6 +160,11 @@ Resources:
               - "sns:Publish"
               - "sns:Subscribe"
             Resource: "*"
+          - Effect: "Allow"
+            Action:
+              - "batch:DescribeJobs"
+              - "batch:ListJobs"
+            Resource: "*"
       Roles:
         - !Ref MonitoringLambdaRole
 
