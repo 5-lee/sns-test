@@ -7,6 +7,7 @@ from common.utils import get_batch_job_details, get_rag_metrics, format_error_me
 from common.slack_bot import MonitoringBot
 from common.monitoring_details import MonitoringDetails
 import urllib.parse
+import time
 
 class LambdaMonitoringHandler:
     def __init__(self):
@@ -161,7 +162,27 @@ def handle_error_event(event, context):
         error_id = sup_event['Trigger']['Dimensions'][0]['value']
         
         service = SERVICE_TYPE.DEV
-        log_group_path = f"/aws/{service.name}/errors"
+        
+        # CloudWatch Logs 클라이언트 생성
+        logs_client = boto3.client('logs')
+        log_group = f"/aws/{service.name}/errors"
+        
+        # 로그 이벤트 직접 전송
+        try:
+            logs_client.put_log_events(
+                logGroupName=log_group,
+                logStreamName=f"error-{error_id}",
+                logEvents=[{
+                    'timestamp': int(time.time() * 1000),
+                    'message': error_msg
+                }]
+            )
+        except logs_client.exceptions.ResourceNotFoundException:
+            # 로그 스트림이 없으면 생성
+            logs_client.create_log_stream(
+                logGroupName=log_group,
+                logStreamName=f"error-{error_id}"
+            )
         
         slack = SlackAlarm(
             p_slack_channel=SLACK_CHANNELS.ERROR,
@@ -177,7 +198,7 @@ def handle_error_event(event, context):
             p_service_type=service,
             p_error_msg=error_msg,
             p_error_id=error_id,
-            p_log_group=log_group_path
+            p_log_group=log_group
         )
         
         return handler.handle_response('Error notification sent successfully')
