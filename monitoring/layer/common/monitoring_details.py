@@ -3,6 +3,10 @@ import time
 import datetime
 from botocore.exceptions import ClientError
 
+def handle_api_error(func_name: str, error: Exception, default_return: any = None):
+    logging.error(f"Error in {func_name}: {str(error)}")
+    return default_return
+
 class MonitoringDetails:
     def __init__(self, cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client=None):
         self.setup_clients(cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client)
@@ -80,12 +84,11 @@ class MonitoringDetails:
                 }
 
         except Exception as e:
-            logging.error(f"예상치 못한 오류: {str(e)}")
-            return {
+            return handle_api_error("get_error_details", e, {
                 "stack_trace": "로그 조회 실패",
                 "related_logs": str(e),
                 "error_history": "이력 조회 실패"
-            }
+            })
 
     def get_batch_details(self, p_job_id: str) -> dict:
         try:

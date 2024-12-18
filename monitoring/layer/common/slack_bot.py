@@ -13,6 +13,10 @@ from .constant import SLACK_CHANNELS
 import warnings
 warnings.filterwarnings(action='ignore')
 
+def log_action(func_name: str, message: str, level: str = "debug"):
+    log_func = getattr(logging, level.lower())
+    log_func(f"[MonitoringBot][{func_name}] {message}")
+
 class MonitoringBot:
     def __init__(self, init_k8s=False):
         init_event()
@@ -53,14 +57,14 @@ class MonitoringBot:
             return None
 
     def register_handlers(self):
-        # 기본 메시지 핸들러
         @self.app.message("안녕")
         def handle_hello(message, say):
+            log_action("handle_hello", "Received hello message")
             say(f"안녕하세요 <@{message['user']}>! 모니터링 봇입니다.")
 
-        # 멘션 핸들러
         @self.app.event("app_mention")
         def handle_mention(body, say):
+            log_action("handle_mention", "Received mention event")
             logging.info("멘션 이벤트 수신됨")
             logging.info(f"이벤트 내용: {body}")
             

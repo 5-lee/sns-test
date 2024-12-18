@@ -88,41 +88,30 @@ class SlackAlarm:
         self.thread_ts = result['ts']
         return self.thread_ts
 
-    def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, p_error_id: str, p_log_group: str) -> str:
-        """에러 알림 전송"""
-        logging.info(f"Sending error alert - Service: {p_service_type}, Error ID: {p_error_id}, Log Group: {p_log_group}")
-        logging.debug(f"[SlackAlarm][send_error_alert] START")
-        if not isinstance(p_service_type, SERVICE_TYPE) or p_service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
-            logging.error(f"[SlackAlarm][send_error_alert] Invalid service type: {p_service_type}")
-            return
+    def _prepare_message(self, message_template: list, **kwargs) -> list:
+        """메시지 템플릿 준비"""
+        message = copy.deepcopy(message_template)
+        for block in message:
+            for key, value in block.items():
+                if isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        if isinstance(sub_value, str):
+                            value[sub_key] = sub_value.format(**kwargs)
+        return message
 
-        # 메인 에러 알림 메시지 전송
-        message = copy.deepcopy(MESSAGE_BLOCKS.ERROR_ALERT.value[1])
-        message[1]['fields'][0]['text'] = message[1]['fields'][0]['text'].format(
-            service_nm=p_service_type.name
+    def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, 
+                        p_error_id: str, p_log_group: str) -> str:
+        message = self._prepare_message(
+            MESSAGE_BLOCKS.ERROR_ALERT.value[1],
+            service_nm=p_service_type.name,
+            error_time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            error_msg=p_error_msg,
+            error_id=p_error_id,
+            cloudwatch_url=self.create_console_url(p_service_type, p_error_id)
         )
-        message[1]['fields'][1]['text'] = message[1]['fields'][1]['text'].format(
-            error_time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        )
-        message[2]['text']['text'] = message[2]['text']['text'].format(
-            error_msg=p_error_msg
-        )
-        message[3]['elements'][0]['value'] = p_error_id
-        message[3]['elements'][1]['url'] = self.create_console_url(p_service_type, p_error_id)
-
+        
         result = self.__send_message(p_message_blocks=message)
         self.thread_ts = result['ts']
-
-        # 에러 상세 정보를 쓰레드에 바로 추가
-        error_details = self.monitoring_details.get_error_details(p_error_id)
-        thread_message = copy.deepcopy(MESSAGE_BLOCKS.ERROR_DETAIL_THREAD.value[1])
-        thread_message[0]['text']['text'] = thread_message[0]['text']['text'].format(**error_details)
-
-        self.__send_message(
-            p_message_blocks=thread_message,
-            p_thread_ts=self.thread_ts
-        )
-
         return self.thread_ts
 
     def send_batch_status(self, p_service_type: SERVICE_TYPE, p_job_name: str, p_status: str, p_job_id: str) -> str:
