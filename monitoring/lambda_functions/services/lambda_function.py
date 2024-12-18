@@ -181,8 +181,17 @@ def handle_error_event(event, context):
     
     try:
         sup_event = json.loads(event['Records'][0]['Sns']['Message'])
-        error_msg = sup_event['AlarmDescription']
-        error_id = sup_event['Trigger']['Dimensions'][0]['value']
+        alarm_description = sup_event['AlarmDescription']
+        
+        # AlarmDescription 파싱 ("ERROR error_id message" 형식)
+        parts = alarm_description.split(' ', 2)  # 최대 2번 split
+        if len(parts) >= 3 and parts[0] == 'ERROR':
+            error_id = parts[1]
+            error_msg = parts[2]
+        else:
+            # 기존 방식으로 폴백
+            error_msg = alarm_description
+            error_id = sup_event['Trigger']['Dimensions'][0]['value']
         
         service = SERVICE_TYPE.DEV
         
@@ -197,11 +206,10 @@ def handle_error_event(event, context):
                 logStreamName=f"error-{error_id}",
                 logEvents=[{
                     'timestamp': int(time.time() * 1000),
-                    'message': error_msg
+                    'message': f"ERROR {error_id} {error_msg}"  # 형식 통일
                 }]
             )
         except logs_client.exceptions.ResourceNotFoundException:
-            # 로그 스트림이 없으면 생성
             logs_client.create_log_stream(
                 logGroupName=log_group,
                 logStreamName=f"error-{error_id}"

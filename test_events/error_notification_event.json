@@ -1,0 +1,22 @@
+{
+  "Records": [
+    {
+      "EventSource": "aws:sns",
+      "EventVersion": "1.0",
+      "EventSubscriptionArn": "arn:aws:sns:ap-northeast-2:123456789012:error-topic:subscription-id",
+      "Sns": {
+        "Type": "Notification",
+        "MessageId": "test-message-id",
+        "TopicArn": "arn:aws:sns:ap-northeast-2:123456789012:error-topic",
+        "Subject": "Error Alert",
+        "Message": "{\"AlarmName\":\"TestErrorAlarm\",\"AlarmDescription\":\"ERROR db-connection-error-001 데이터베이스 연결 오류\\n\\n오류 타입: DatabaseConnectionError\\n오류 위치: user-service\\n발생 시간: 2024-03-19 10:00:00\\n상세 내용: Connection timed out (30s)\",\"AWSAccountId\":\"123456789012\",\"NewStateValue\":\"ALARM\",\"NewStateReason\":\"Threshold Crossed\",\"StateChangeTime\":\"2024-03-19T10:00:00.000+0000\",\"Region\":\"Asia Pacific (Seoul)\",\"OldStateValue\":\"OK\",\"Trigger\":{\"MetricName\":\"ErrorCount\",\"Namespace\":\"AWS/Lambda\",\"StatisticType\":\"Statistic\",\"Statistic\":\"SUM\",\"Unit\":null,\"Dimensions\":[{\"name\":\"ErrorType\",\"value\":\"db-connection-error-001\"}],\"Period\":300,\"EvaluationPeriods\":1,\"ComparisonOperator\":\"GreaterThanThreshold\",\"Threshold\":0.0}}",
+        "Timestamp": "2024-03-19T10:00:00.000Z",
+        "SignatureVersion": "1",
+        "Signature": "test-signature",
+        "SigningCertUrl": "test-cert-url",
+        "UnsubscribeUrl": "test-unsub-url",
+        "MessageAttributes": {}
+      }
+    }
+  ]
+} 

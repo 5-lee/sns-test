@@ -1,0 +1,21 @@
+{
+  "version": "0",
+  "id": "test-rag-event-id",
+  "detail-type": "RAG Performance Metrics",
+  "source": "custom.rag",
+  "account": "123456789012",
+  "time": "2024-03-19T10:00:00Z",
+  "region": "ap-northeast-2",
+  "detail": {
+    "metrics": {
+      "accuracy": "0.75",
+      "precision": "0.82",
+      "recall": "0.78",
+      "f1": "0.80",
+      "mrr": "0.85"
+    },
+    "threshold": "0.80",
+    "pipelineRunId": "test-pipeline-123",
+    "evaluationTime": "2024-03-19T10:00:00Z"
+  }
+} 

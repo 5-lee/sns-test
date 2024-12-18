@@ -1,0 +1,27 @@
+{
+  "version": "0",
+  "id": "test-batch-event-id",
+  "detail-type": "Batch Job State Change",
+  "source": "aws.batch",
+  "account": "123456789012",
+  "time": "2024-03-19T10:00:00Z",
+  "region": "ap-northeast-2",
+  "detail": {
+    "jobName": "test-batch-job",
+    "jobId": "test-job-123",
+    "jobQueue": "test-job-queue",
+    "status": "FAILED",
+    "statusReason": "Essential container in task exited",
+    "attempts": [
+      {
+        "container": {
+          "exitCode": 1,
+          "reason": "Memory limit exceeded"
+        }
+      }
+    ],
+    "createdAt": 1710835200000,
+    "startedAt": 1710835210000,
+    "stoppedAt": 1710835300000
+  }
+} 
