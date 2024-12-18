@@ -9,6 +9,7 @@ from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 from .utils import init_event
 from .monitoring_details import MonitoringDetails
 from .constant import SLACK_CHANNELS
+from .message_blocks import MessageBlockBuilder
 
 import warnings
 warnings.filterwarnings(action='ignore')
@@ -32,7 +33,7 @@ class MonitoringBot:
         self.register_handlers()
         logging.info("이벤트 핸들러 등록 완료")
         
-        # 허용된 채널 목록 ���가
+        # 허용된 채널 목록 가
         self.allowed_channels = [
             SLACK_CHANNELS.ERROR.value[1],  # C084D1G6SJE
             SLACK_CHANNELS.ALARM.value[1]   # C084FGGMNS0
@@ -65,7 +66,7 @@ class MonitoringBot:
         @self.app.event("app_mention")
         def handle_mention(body, say):
             log_action("handle_mention", "Received mention event")
-            logging.info("멘션 이벤트 수신됨")
+            logging.info("멘��� 이벤트 수신됨")
             logging.info(f"이벤트 내용: {body}")
             
             event = body["event"]
@@ -138,81 +139,62 @@ class MonitoringBot:
         # 버튼 액션 핸들러
         @self.app.action("view_error_detail")
         def handle_error_button_click(ack, body, say):
-            try:
-                ack()
-                logging.info("전체 body 구조:")
-                logging.info(body)
-                
-                # 원본 메시지의 ts를 가져옴 (새 쓰레드의 부모가 될 메시지)
-                parent_ts = None
-                if "message" in body:
-                    parent_ts = body["message"].get("ts")
-                elif "container" in body:
-                    parent_ts = body["container"].get("message_ts")
-                    
-                if not parent_ts:
-                    logging.error("부모 메시지의 ts를 찾을 수 없습니다")
-                    raise ValueError("부모 메시지를 찾을 수 없습니다")
-                    
-                logging.info(f"부모 메시지 ts: {parent_ts}")
-                
-                error_id = body["actions"][0]["value"]
-                error_details = self.monitoring_details.get_error_details(error_id)
-                
-                # 쓰레드 메시지 블록 생성
-                thread_blocks = [
-                    {
-                        "type": "header",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "🔍 에러 상세 정보"
-                        }
-                    },
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": "*스택 트레이스:*\n```{}```".format(error_details['stack_trace'])
-                        }
-                    },
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": "*관련 로그:*\n```{}```".format(error_details['related_logs'])
-                        }
-                    },
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": "*이전 발생 이력:*\n{}".format(error_details['error_history'])
-                        }
-                    }
-                ]
-                
-                # 쓰레드로 상세 정보 전송
-                say(
-                    blocks=thread_blocks,
-                    thread_ts=parent_ts  # 원본 메시지의 ts를 thread_ts로 사용하여 새 쓰레드 시작
-                )
-                
-            except Exception as e:
-                logging.error(f"에러 상세 조회 실패: {str(e)}")
-                logging.exception("상세 에러 정보:")
-                say(text=f"에러 상세 조회 중 오류가 발생했습니다: {str(e)}")
+            ack()
+            error_id = body["actions"][0]["value"]
+            error_details = self.monitoring_details.get_error_details(error_id)
+            blocks = MessageBlockBuilder.create_error_blocks(...)
+            say(blocks=blocks, thread_ts=thread_ts)
 
         @self.app.action("view_batch_detail")
-        def handle_batch_button_click(ack, body, say):
+        def handle_view_batch_detail(ack, body, say):
             ack()
-            thread_ts = body["message"]["thread_ts"]
-            say(text=self.get_batch_summary(), thread_ts=thread_ts)
+            try:
+                batch_job_id = body["actions"][0]["value"]
+                thread_ts = body["message"]["thread_ts"] if "thread_ts" in body["message"] else body["message"]["ts"]
+                
+                # 배치 작업 상세 정보 조회
+                batch_details = self.monitoring_details.get_batch_details(batch_job_id)
+                
+                blocks = MessageBlockBuilder.create_batch_blocks(
+                    service_type=SERVICE_TYPE.DEV,  # 현재 컨텍스트의 서비스 타입
+                    job_name=batch_details['job_name'],
+                    status=batch_details['status'],
+                    job_id=batch_job_id
+                )
+                
+                say(blocks=blocks, thread_ts=thread_ts)
+                
+            except Exception as e:
+                logging.error(f"배치 작업 상세 정보 조회 실패: {str(e)}")
+                say(
+                    text="배치 작업 상세 정보를 조회하는 중 오류가 발생했습니다.",
+                    thread_ts=thread_ts
+                )
 
         @self.app.action("view_rag_detail")
         def handle_rag_button_click(ack, body, say):
             ack()
-            thread_ts = body["message"]["thread_ts"]
-            say(text=self.get_rag_performance_summary(), thread_ts=thread_ts)
+            try:
+                pipeline_id = body["actions"][0]["value"]
+                thread_ts = body["message"]["thread_ts"] if "thread_ts" in body["message"] else body["message"]["ts"]
+                
+                rag_details = self.monitoring_details.get_rag_details(pipeline_id)
+                
+                blocks = MessageBlockBuilder.create_rag_blocks(
+                    service_type=SERVICE_TYPE.DEV,
+                    accuracy=float(rag_details['accuracy']),
+                    threshold=float(rag_details['threshold']),
+                    pipeline_id=pipeline_id
+                )
+                
+                say(blocks=blocks, thread_ts=thread_ts)
+                
+            except Exception as e:
+                logging.error(f"RAG 성능 상세 정보 조회 실패: {str(e)}")
+                say(
+                    text="RAG 성능 상세 정보를 조회하는 중 오류가 발생했습니다.",
+                    thread_ts=thread_ts
+                )
 
         @self.app.event("message")
         def handle_message_events(body, logger, say):

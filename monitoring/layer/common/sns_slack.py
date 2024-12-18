@@ -8,6 +8,7 @@ from slack_sdk.errors import SlackClientError
 from .constant import SLACK_CHANNELS, MESSAGE_BLOCKS, SERVICE_TYPE, SLACK_ACTIONS
 from .utils import init_alarm
 from .monitoring_details import MonitoringDetails
+from .message_blocks import MessageBlockBuilder
 import warnings
 warnings.filterwarnings(action='ignore')
 
@@ -107,61 +108,54 @@ class SlackAlarm:
 
     def send_error_alert(self, p_service_type: SERVICE_TYPE, p_error_msg: str, 
                         p_error_id: str, p_log_group: str) -> str:
-        message = self._prepare_message(
-            MESSAGE_BLOCKS.ERROR_ALERT.value[1],
-            service_nm=p_service_type.name,
-            error_time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            error_msg=p_error_msg,
-            error_id=p_error_id,
-            cloudwatch_url=self.create_console_url(p_service_type, p_error_id)
-        )
-        
-        result = self.__send_message(p_message_blocks=message)
-        self.thread_ts = result['ts']
-        return self.thread_ts
+        """에러 알림 전송"""
+        try:
+            blocks = MessageBlockBuilder.create_error_blocks(
+                service_type=p_service_type,
+                error_msg=p_error_msg,
+                error_id=p_error_id,
+                error_time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+            result = self.__send_message(blocks)
+            return result.get('ts')
+            
+        except Exception as e:
+            logging.error(f"[SlackAlarm][send_error_alert] Error: {str(e)}")
+            raise
 
-    def send_batch_status(self, p_service_type: SERVICE_TYPE, p_job_name: str, p_status: str, p_job_id: str) -> str:
-        """배치 상태 전송"""
-        logging.debug(f"[SlackAlarm][send_batch_status] START")
-        if not isinstance(p_service_type, SERVICE_TYPE) or p_service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
-            logging.error(f"[SlackAlarm][send_batch_status] Invalid service type: {p_service_type}")
-            return
-
-        message = copy.deepcopy(MESSAGE_BLOCKS.BATCH_STATUS.value[1])
-        message[1]['fields'][0]['text'] = message[1]['fields'][0]['text'].format(
-            batch_job_name=p_job_name
-        )
-        message[1]['fields'][1]['text'] = message[1]['fields'][1]['text'].format(
-            job_status=p_status
-        )
-        message[2]['elements'][0]['value'] = p_job_id
-        message[2]['elements'][1]['url'] = f"https://ap-northeast-2.console.aws.amazon.com/batch/home?region=ap-northeast-2#jobs/detail/{p_job_id}"
-
-        result = self.__send_message(p_message_blocks=message)
-        self.thread_ts = result['ts']
-        return self.thread_ts
+    def send_batch_status(self, p_service_type: SERVICE_TYPE, p_job_name: str,
+                         p_status: str, p_job_id: str) -> str:
+        """배치 작업 상태 알림 전송"""
+        try:
+            blocks = MessageBlockBuilder.create_batch_blocks(
+                service_type=p_service_type,
+                job_name=p_job_name,
+                status=p_status,
+                job_id=p_job_id
+            )
+            result = self.__send_message(blocks)
+            return result.get('ts')
+            
+        except Exception as e:
+            logging.error(f"[SlackAlarm][send_batch_status] Error: {str(e)}")
+            raise
 
     def send_rag_performance(self, p_service_type: SERVICE_TYPE, p_accuracy: float, 
-                           p_threshold: float, p_pipeline_id: str) -> str:
-        """RAG 성능 정보 전송"""
-        logging.debug(f"[SlackAlarm][send_rag_performance] START")
-        if not isinstance(p_service_type, SERVICE_TYPE) or p_service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
-            logging.error(f"[SlackAlarm][send_rag_performance] Invalid service type: {p_service_type}")
-            return
-
-        message = copy.deepcopy(MESSAGE_BLOCKS.RAG_PERFORMANCE.value[1])
-        message[1]['fields'][0]['text'] = message[1]['fields'][0]['text'].format(
-            accuracy_score=f"{p_accuracy:.2%}"
-        )
-        message[1]['fields'][1]['text'] = message[1]['fields'][1]['text'].format(
-            threshold=f"{p_threshold:.2%}"
-        )
-        message[2]['elements'][0]['value'] = p_pipeline_id
-        message[2]['elements'][1]['url'] = self.create_console_url(p_service_type, p_pipeline_id)
-
-        result = self.__send_message(p_message_blocks=message)
-        self.thread_ts = result['ts']
-        return self.thread_ts
+                        p_threshold: float, p_pipeline_id: str) -> str:
+        """RAG 성능 알림 전송"""
+        try:
+            blocks = MessageBlockBuilder.create_rag_blocks(
+                service_type=p_service_type,
+                accuracy=p_accuracy,
+                threshold=p_threshold,
+                pipeline_id=p_pipeline_id
+            )
+            result = self.__send_message(blocks)
+            return result.get('ts')
+            
+        except Exception as e:
+            logging.error(f"[SlackAlarm][send_rag_performance] Error: {str(e)}")
+            raise
 
     def send_error_detail_thread(self, p_error_id: str) -> str:
         """에러 상세 정보 쓰레드 전송"""
