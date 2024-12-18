@@ -97,33 +97,56 @@ def handle_slack_event(event, context):
 
 def handle_batch_event(event, context):
     """Batch 이벤트 처리"""
-    batch = boto3.client('batch')
-    cloudwatch = boto3.client('cloudwatch')
-    monitoring_details = MonitoringDetails(
-        cloudwatch_client=None,
-        batch_client=batch,
-        cloudwatch_metrics_client=cloudwatch
-    )
-    
-    slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
-    
-    job_name = event['detail']['jobName']
-    job_status = event['detail']['status']
-    job_id = event['detail']['jobId']
-    
-    job_details = get_batch_job_details(job_id)
-    
-    slack.send_batch_status(
-        p_service_type=SERVICE_TYPE.DEV,
-        p_job_name=job_name,
-        p_status=job_status,
-        p_job_id=job_id
-    )
-    
-    return {
-        'statusCode': 200,
-        'body': json.dumps('Batch status notification sent successfully')
-    }
+    try:
+        batch = boto3.client('batch')
+        cloudwatch = boto3.client('cloudwatch')
+        monitoring_details = MonitoringDetails(
+            cloudwatch_client=None,
+            batch_client=batch,
+            cloudwatch_metrics_client=cloudwatch
+        )
+        
+        slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
+        
+        job_name = event['detail']['jobName']
+        job_status = event['detail']['status']
+        job_id = event['detail']['jobId']
+        
+        # 일반 로그는 기본 Lambda 로그 그룹으로
+        logging.info(f"Batch job status changed: {job_name} ({job_id}) -> {job_status}")
+        
+        job_details = get_batch_job_details(job_id)
+        
+        slack.send_batch_status(
+            p_service_type=SERVICE_TYPE.DEV,
+            p_job_name=job_name,
+            p_status=job_status,
+            p_job_id=job_id
+        )
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps('Batch status notification sent successfully')
+        }
+    except Exception as e:
+        # 에러는 /aws/DEV/errors로 전송
+        error_msg = f"Batch monitoring error: {str(e)}"
+        logs_client = boto3.client('logs')
+        log_group = "/aws/DEV/errors"
+        
+        try:
+            logs_client.put_log_events(
+                logGroupName=log_group,
+                logStreamName=f"batch-error-{int(time.time())}",
+                logEvents=[{
+                    'timestamp': int(time.time() * 1000),
+                    'message': f"ERROR BATCH_MONITOR {error_msg}"
+                }]
+            )
+        except Exception as log_error:
+            logging.error(f"Failed to write to error log: {str(log_error)}")
+        
+        raise
 
 def handle_rag_event(event, context):
     """RAG 성능 모니터링 이벤트 처리"""

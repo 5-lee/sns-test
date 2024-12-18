@@ -3,6 +3,7 @@ import boto3
 import logging
 from datetime import datetime
 from .constant import SLACK_TOKENS 
+import time
 
 def __set_environ(p_slack_token:SLACK_TOKENS):
     ssm = boto3.client('ssm')
@@ -28,9 +29,13 @@ def get_cloudwatch_logs(log_group: str, query: str, start_time: int, end_time: i
     """CloudWatch 로그 조회 유틸리티"""
     try:
         logs_client = boto3.client('cloudwatch-logs')
-        # 로그 그룹이 지정되지 않은 경우 기본값 사용
-        if not log_group:
+        
+        # 에러 로그 조회인 경우
+        if "ERROR" in query:
             log_group = "/aws/DEV/errors"
+        # 그 외의 경우 기본 Lambda 로그 그룹 사용
+        elif not log_group:
+            log_group = "/aws/lambda/DEV-monitoring"
             
         response = logs_client.filter_log_events(
             logGroupName=log_group,
@@ -70,13 +75,43 @@ def get_rag_metrics(metrics: dict) -> dict:
         return {}
 
 def format_error_message(error_msg: str, service_name: str) -> dict:
-    """에러 메시지 포맷팅"""
-    return {
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'service': service_name,
-        'error': error_msg,
-        'severity': 'ERROR'
-    }
+    """에러 메시지 포맷팅 및 에러 로그 그룹에 기록"""
+    try:
+        logs_client = boto3.client('logs')
+        log_group = "/aws/DEV/errors"
+        timestamp = int(time.time() * 1000)
+        
+        formatted_msg = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'service': service_name,
+            'error': error_msg,
+            'severity': 'ERROR'
+        }
+        
+        try:
+            logs_client.put_log_events(
+                logGroupName=log_group,
+                logStreamName=f"error-{service_name}-{timestamp}",
+                logEvents=[{
+                    'timestamp': timestamp,
+                    'message': f"ERROR {service_name} {error_msg}"
+                }]
+            )
+        except logs_client.exceptions.ResourceNotFoundException:
+            logs_client.create_log_stream(
+                logGroupName=log_group,
+                logStreamName=f"error-{service_name}-{timestamp}"
+            )
+            
+        return formatted_msg
+    except Exception as e:
+        logging.error(f"에러 메시지 포맷팅 실패: {str(e)}")
+        return {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'service': service_name,
+            'error': error_msg,
+            'severity': 'ERROR'
+        }
 
 def put_monitoring_metrics(namespace: str, metric_name: str, value: float, dimensions: list) -> None:
     """CloudWatch 메트릭 기록"""

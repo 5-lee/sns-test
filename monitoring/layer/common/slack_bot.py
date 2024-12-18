@@ -32,7 +32,7 @@ class MonitoringBot:
         self.register_handlers()
         logging.info("이벤트 핸들러 등록 완료")
         
-        # 허용된 채널 목록 추가
+        # 허용된 채널 목록 ���가
         self.allowed_channels = [
             SLACK_CHANNELS.ERROR.value[1],  # C084D1G6SJE
             SLACK_CHANNELS.ALARM.value[1]   # C084FGGMNS0
@@ -228,53 +228,46 @@ class MonitoringBot:
             end_time = int(time.time() * 1000)
             start_time = end_time - (24 * 60 * 60 * 1000)
             
-            log_groups = [
-                "/aws/lambda/DEV-monitoring-batch-monitor",
-                "/aws/lambda/DEV-monitoring-chatbot",
-                "/aws/lambda/DEV-monitoring-error-handler",
-                "/aws/lambda/DEV-monitoring-rag-monitor",
-            ]
+            # 단일 로그 그룹으로 변경
+            log_group = "/aws/DEV/errors"
             
             all_errors = []
-            for log_group in log_groups:
-                logs = self.monitoring_details.cloudwatch.filter_log_events(
-                    logGroupName=log_group,
-                    filterPattern="ERROR",
-                    startTime=start_time,
-                    endTime=end_time,
-                    limit=1
-                )
-                if logs.get('events'):
-                    all_errors.extend(logs['events'])
+            logs = self.monitoring_details.cloudwatch.filter_log_events(
+                logGroupName=log_group,
+                filterPattern="ERROR",
+                startTime=start_time,
+                endTime=end_time,
+                limit=10  # 최근 10개의 에러만 조회
+            )
+            
+            if logs.get('events'):
+                all_errors.extend(logs['events'])
             
             if not all_errors:
                 logging.info("최근 24시간 동안 발생한 에러가 없습니다.")
-                raise ValueError("No errors found")
+                return "최근 24시간 동안 발생한 에러가 없습니다."
             
             # 타임스탬프로 정렬하여 가장 최근 에러 사용
             recent_error = sorted(all_errors, key=lambda x: x['timestamp'], reverse=True)[0]
             error_message = recent_error['message']
             
-            # 에러 ID 추출 로직 (예: "ERROR my_lambda_error_123" 형식 가정)
+            # 에러 ID 추출 로직
             error_id = error_message.split('ERROR ')[-1].split()[0]
             
             # 추출된 에러 ID로 상세 정보 조회
             error_details = self.monitoring_details.get_error_details(error_id)
             
-            summary = "최근 에러 현황입니:\n\n"
+            summary = "최근 에러 현황입니다:\n\n"
             summary += "스택 트레이스:\n"
             summary += error_details["stack_trace"][:500] + "...\n\n"
             summary += "최근 에러 이력:\n"
             summary += error_details["error_history"]
             
             return summary
-        except ClientError as e:
-            logging.error(f"CloudWatch API 접근 오류: {e}")
-            raise
-        
+            
         except Exception as e:
-            logging.error(f"예상치 못한 오류 발생: {e}")
-            raise
+            logging.error(f"에러 요약 조회 실패: {str(e)}")
+            return f"에러 요약 조회 중 오류가 발생했습니다: {str(e)}"
 
     def get_batch_summary(self) -> str:
         """배치 작업 현황 조회"""

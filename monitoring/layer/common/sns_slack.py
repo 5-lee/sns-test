@@ -24,11 +24,17 @@ class SlackAlarm:
     
     def create_console_url(self, service_type: SERVICE_TYPE, resource_id: str) -> str:
         """CloudWatch 로그 URL 생성"""
-        if not isinstance(service_type, SERVICE_TYPE) or service_type not in [SERVICE_TYPE.DEV, SERVICE_TYPE.TEST]:
+        if not isinstance(service_type, SERVICE_TYPE):
             logging.error(f"[SlackAlarm][create_console_url] Invalid service type: {service_type}")
             return ""
-        # URL 인코딩된 로그 그룹 경로 사용
-        encoded_path = f"/aws/{service_type.name}/errors"
+        
+        # 에러 로그의 경우
+        if resource_id.startswith('error-'):
+            encoded_path = f"/aws/{service_type.name}/errors"
+        else:
+            # 일반 Lambda 로그의 경우
+            encoded_path = f"/aws/lambda/DEV-monitoring"
+        
         return f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2#logsV2:log-groups/log-group/{encoded_path}"
     
     def __send_message(self, p_message_blocks: list[dict], p_thread_ts: str = None) -> dict:

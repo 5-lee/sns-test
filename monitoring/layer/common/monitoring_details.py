@@ -45,50 +45,50 @@ class MonitoringDetails:
             log_group_name = "/aws/DEV/errors"
             
             try:
-                response = self.cloudwatch.describe_log_groups(
-                    logGroupNamePrefix=log_group_name
-                )
-                
-                if not response.get('logGroups'):
-                    logging.error(f"로그 그룹을 찾을 수 없음: {log_group_name}")
-                    return {
-                        "stack_trace": "로그 그룹을 찾을 수 없습니다",
-                        "related_logs": f"로그 그룹이 존재하지 않음: {log_group_name}",
-                        "error_history": "이력 조회 실패"
-                    }
-
-                current_logs = self.cloudwatch.filter_log_events(
+                response = self.cloudwatch.filter_log_events(
                     logGroupName=log_group_name,
                     filterPattern=f"ERROR {p_error_id}",
                     startTime=start_time,
-                    endTime=end_time,
-                    limit=10
+                    endTime=end_time
                 )
+                
+                if not response.get('events'):
+                    return {
+                        "stack_trace": "에러 로그를 찾을 수 없습니다",
+                        "related_logs": "관련 로그가 없습니다",
+                        "error_history": "이력이 없습니다"
+                    }
 
-                formatted_logs = []
-                for log in current_logs.get('events', []):
-                    formatted_logs.append(f"[{datetime.datetime.fromtimestamp(log['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')}] {log['message']}")
+                error_logs = response['events']
+                stack_trace = []
+                related_logs = []
+                
+                for log in error_logs:
+                    if 'Traceback' in log['message']:
+                        stack_trace.append(log['message'])
+                    else:
+                        related_logs.append(log['message'])
 
                 return {
-                    "stack_trace": "\n".join(formatted_logs) if formatted_logs else "최근 에러 로그가 없습니다.",
-                    "related_logs": f"로그 그룹: {log_group_name}",
-                    "error_history": f"최근 {len(formatted_logs)}개의 에러 로그를 표시합니다."
+                    "stack_trace": "\n".join(stack_trace) if stack_trace else "스택 트레이스가 없습니다",
+                    "related_logs": "\n".join(related_logs) if related_logs else "관련 로그가 없습니다",
+                    "error_history": f"최근 {len(error_logs)}개의 관련 에러가 발견되었습니다"
                 }
 
-            except Exception as e:
-                logging.error(f"CloudWatch API 에러: {str(e)}")
+            except self.cloudwatch.exceptions.ResourceNotFoundException:
                 return {
-                    "stack_trace": "로그 조회 실패",
-                    "related_logs": f"CloudWatch API 에러: {str(e)}",
+                    "stack_trace": "로그 그룹을 찾을 수 없습니다",
+                    "related_logs": f"로그 그룹이 존재하지 않음: {log_group_name}",
                     "error_history": "이력 조회 실패"
                 }
-
+            
         except Exception as e:
-            return handle_api_error("get_error_details", e, {
-                "stack_trace": "로그 조회 실패",
-                "related_logs": str(e),
+            logging.error(f"에러 상세 정보 조회 실패: {str(e)}")
+            return {
+                "stack_trace": f"조회 실패: {str(e)}",
+                "related_logs": "조회 중 오류 발생",
                 "error_history": "이력 조회 실패"
-            })
+            }
 
     def get_batch_details(self, p_job_id: str) -> dict:
         try:
