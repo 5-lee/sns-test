@@ -70,7 +70,57 @@ Resources:
       LogGroupName: !Sub '/aws/${ServiceType}/errors'
       RetentionInDays: 30
 
-  # Lambda Functions
+  # EventBridge Rules로 변경
+  ErrorMonitoringRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.cloudwatch.logs
+        detail-type:
+          - CloudWatch Log Alarm
+        detail:
+          status:
+            - ALARM
+      State: ENABLED
+      Targets:
+        - Arn: !Ref ErrorNotificationTopic
+          Id: ErrorNotification
+
+  BatchJobMonitoringRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.batch
+        detail-type:
+          - "Batch Job State Change"
+        detail:
+          status:
+            - FAILED
+            - STOPPED
+      State: ENABLED
+      Targets:
+        - Arn: !Ref BatchNotificationTopic
+          Id: BatchJobNotification
+
+  RagPerformanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - custom.rag
+        detail-type:
+          - "RAG Performance Metric"
+        detail:
+          score:
+            - less-than: !Ref RagPerformanceThreshold
+      State: ENABLED
+      Targets:
+        - Arn: !Ref RagNotificationTopic
+          Id: RagNotification
+
+  # Lambda Function 수정
   MonitoringFunction:
     Type: AWS::Serverless::Function
     DependsOn: ErrorLogGroup
@@ -213,3 +263,75 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: sns.amazonaws.com
       SourceArn: !Ref RagNotificationTopic
+
+  # CodePipeline SNS Topic 추가
+  CodePipelineNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub ${ServiceType}-${DefaultName}-codepipeline-notifications
+      TopicName: !Sub ${ServiceType}-${DefaultName}-codepipeline-topic
+
+  # CodePipeline EventBridge Rule
+  CodePipelineEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Pipeline Execution State Change
+          - CodePipeline Stage Execution State Change
+          - CodePipeline Action Execution State Change
+        detail:
+          pipeline:
+            - ecs-museify-pipeline
+          state:
+            - FAILED
+            - STOPPED
+            - STARTED
+            - SUCCEEDED
+            - RESUMED
+            - CANCELED
+            - SUPERSEDED
+      State: ENABLED
+      Targets:
+        - Arn: !Ref CodePipelineNotificationTopic
+          Id: CodePipelineNotification
+
+  # CodePipeline 승인 대기 상태 모니터링
+  CodePipelineApprovalRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Action Execution State Change
+        detail:
+          pipeline:
+            - ecs-museify-pipeline
+          type:
+            - Manual
+          state:
+            - STARTED
+      State: ENABLED
+      Targets:
+        - Arn: !Ref CodePipelineNotificationTopic
+          Id: CodePipelineApprovalNotification
+
+  # SNS Topic Subscription
+  CodePipelineNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref CodePipelineNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt MonitoringFunction.Arn
+
+  # Lambda Permission
+  CodePipelineInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MonitoringFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref CodePipelineNotificationTopic

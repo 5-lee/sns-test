@@ -9,6 +9,9 @@ from common.monitoring_details import MonitoringDetails
 import urllib.parse
 import time
 
+# 상단에 상수 추가
+RAG_THRESHOLD = 0.7  # RAG 성능 임계값
+
 class LambdaMonitoringHandler:
     def __init__(self):
         self.cloudwatch = boto3.client('cloudwatch')
@@ -45,25 +48,35 @@ def handler(event, context):
     try:
         logging.info(f"Received event: {event}")
         
-        # 이벤트 타입 확인
+        # SNS를 통한 이벤트 처리
+        if 'Records' in event:
+            record = event['Records'][0]
+            if record.get('EventSource') == 'aws:sns':
+                message = json.loads(record['Sns']['Message'])
+                
+                # SNS 토픽 ARN으로 이벤트 타입 구분
+                topic_arn = record['Sns'].get('TopicArn', '')
+                
+                if 'codepipeline' in topic_arn:
+                    return handle_codepipeline_event(message, context)
+                elif 'batch' in topic_arn:
+                    return handle_batch_event(message, context)
+                elif 'rag' in topic_arn:
+                    return handle_rag_event(message, context)
+                elif 'error' in topic_arn or 'AlarmDescription' in message:
+                    return handle_error_event(event, context)
+                else:
+                    raise ValueError(f"Unsupported SNS topic: {topic_arn}")
+        
+        # 직접 이벤트 처리
         event_source = event.get('source', '')
         
-        # Slack 이벤트 처리 (chatbot)
         if 'body' in event:
             return handle_slack_event(event, context)
-            
-        # AWS Batch 이벤트 처리
         elif event_source == 'aws.batch':
             return handle_batch_event(event, context)
-            
-        # RAG 성능 모니터링 이벤트 처리
         elif event_source == 'custom.rag':
             return handle_rag_event(event, context)
-            
-        # CloudWatch 에러 알림 처리 (SNS를 통해 전달)
-        elif 'Records' in event and event['Records'][0].get('EventSource') == 'aws:sns':
-            return handle_error_event(event, context)
-            
         else:
             raise ValueError(f"Unsupported event source: {event_source}")
             
@@ -239,12 +252,11 @@ def handle_error_event(event, context):
         raise Exception(f"Invalid event format: {ke}")
 
 def handle_rag_metrics(event, context):
-    # Kubeflow에서 실행된 RAG 파이프라인의 성능 지표를 받아서 처리
+    """Kubeflow에서 실행된 RAG 파이프라인의 성능 지표를 처리"""
     pipeline_id = event['pipeline_id']
     metrics = event['metrics']  # Precision, Recall, F1, MRR 등
     
-    # 성능이 임계값 미달이면 알림 전송
-    if metrics['accuracy'] < THRESHOLD:
+    if metrics['accuracy'] < RAG_THRESHOLD:
         slack_alarm = SlackAlarm(
             SLACK_CHANNELS.ALARM,
             MonitoringDetails()
@@ -252,6 +264,6 @@ def handle_rag_metrics(event, context):
         slack_alarm.send_rag_performance(
             SERVICE_TYPE.DEV,
             metrics['accuracy'],
-            THRESHOLD,
+            RAG_THRESHOLD,
             pipeline_id
         )
