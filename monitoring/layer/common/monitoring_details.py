@@ -46,14 +46,12 @@ def handle_api_error(func_name: str, error: Exception, default_return: any = Non
     return default_return
 
 class MonitoringDetails:
-    def __init__(self, cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client=None):
-        self.setup_clients(cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client)
-        
-    def setup_clients(self, cloudwatch_client, batch_client, cloudwatch_metrics_client, k8s_client):
+    def __init__(self, cloudwatch_client=None, batch_client=None, cloudwatch_metrics_client=None, k8s_client=None):
         self.cloudwatch = cloudwatch_client
         self.batch = batch_client
         self.cloudwatch_metrics = cloudwatch_metrics_client
         self.k8s_client = k8s_client
+        self.batch_metrics = {}  # 배치 작업 메트릭스를 저장할 딕셔너리
     
     def get_time_range(self, hours=24):
         end_time = int(time.time() * 1000)
@@ -128,61 +126,32 @@ class MonitoringDetails:
                 "error_history": "이력 조회 실패"
             }
 
-    def get_batch_details(self, p_job_id: str) -> dict:
+    def get_batch_details(self, job_id: str) -> dict:
+        """Batch 작업 상세 정보 조회"""
         try:
-            job_response = self.batch.describe_jobs(jobs=[p_job_id])
-            if not job_response['jobs']:
-                return handle_api_error(
-                    'get_batch_details', 
-                    ValueError(f"배치 작업을 찾을 수 없음: {p_job_id}"),
-                    {
-                        "total_processed": 0,
-                        "success_count": 0,
-                        "fail_count": 1,
-                        "extract_time": 0,
-                        "transform_time": 0,
-                        "load_time": 0
-                    }
-                )
-            
-            job = job_response['jobs'][0]
-            
-            created_at = job.get('createdAt', 0) / 1000
-            started_at = job.get('startedAt', 0) / 1000
-            stopped_at = job.get('stoppedAt', time.time())
-            
-            metrics_response = self.cloudwatch_metrics.get_metric_statistics(
-                Namespace='AWS/Batch',
-                MetricName='ProcessedCount',
-                Dimensions=[{'Name': 'JobId', 'Value': p_job_id}],
-                StartTime=datetime.datetime.fromtimestamp(started_at),
-                EndTime=datetime.datetime.fromtimestamp(stopped_at),
-                Period=300,
-                Statistics=['Sum']
-            )
-            
-            total_processed = sum(point['Sum'] for point in metrics_response.get('Datapoints', []))
-            success_count = len([a for a in job.get('attempts', []) if a.get('exitCode', 1) == 0])
-            fail_count = len(job.get('attempts', [])) - success_count
-            
+            # 저장된 메트릭스가 있으면 반환
+            if job_id in self.batch_metrics:
+                return self.batch_metrics[job_id]
+                
+            # 없으면 기본값 반환
             return {
-                "total_processed": int(total_processed),
-                "success_count": success_count,
-                "fail_count": fail_count,
-                "extract_time": round(started_at - created_at, 2),
-                "transform_time": round(stopped_at - started_at, 2),
-                "load_time": round(sum(a.get('duration', 0) for a in job.get('attempts', [])) / 1000, 2)
-            }
-            
-        except Exception as e:
-            return handle_api_error('get_batch_details', e, {
                 "total_processed": 0,
                 "success_count": 0,
-                "fail_count": 1,
+                "fail_count": 0,
                 "extract_time": 0,
                 "transform_time": 0,
                 "load_time": 0
-            })
+            }
+        except Exception as e:
+            logging.error(f"배치 작업 정보 조회 실패: {str(e)}")
+            return {
+                "total_processed": 0,
+                "success_count": 0,
+                "fail_count": 0,
+                "extract_time": 0,
+                "transform_time": 0,
+                "load_time": 0
+            }
 
     def get_rag_details(self, p_pipeline_id: str) -> dict:
         try:

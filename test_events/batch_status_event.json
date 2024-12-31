@@ -7,21 +7,49 @@
   "time": "2024-03-19T10:00:00Z",
   "region": "ap-northeast-2",
   "detail": {
-    "jobName": "test-batch-job",
-    "jobId": "test-job-123",
-    "jobQueue": "test-job-queue",
-    "status": "FAILED",
-    "statusReason": "Essential container in task exited",
+    "jobName": "exhibition-crawling-batch",
+    "jobId": "exhibition-crawl-20241231-001",
+    "jobQueue": "exhibition-crawler-queue",
+    "status": "SUCCEEDED",
+    "statusReason": "Essential container in task exited successfully",
     "attempts": [
       {
         "container": {
-          "exitCode": 1,
-          "reason": "Memory limit exceeded"
-        }
+          "exitCode": 0,
+          "reason": "Container exited successfully",
+          "logStreamName": "exhibition-crawling-batch/default/...",
+          "containerInstanceArn": "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/...",
+          "taskArn": "arn:aws:ecs:ap-northeast-2:123456789012:task/...",
+          "processedStats": {
+            "total_processed": 1,
+            "success_count": 1,
+            "fail_count": 0,
+            "extract_time": 7200,
+            "transform_time": 3600,
+            "load_time": 3600
+          }
+        },
+        "startedAt": 1710835210000,
+        "stoppedAt": 1710849610000,
+        "statusReason": "Essential container in task exited successfully"
       }
     ],
     "createdAt": 1710835200000,
     "startedAt": 1710835210000,
-    "stoppedAt": 1710835300000
+    "stoppedAt": 1710849610000,
+    "dependsOn": [],
+    "jobDefinition": "arn:aws:batch:ap-northeast-2:123456789012:job-definition/exhibition-crawler:1",
+    "parameters": {},
+    "container": {
+      "image": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/exhibition-crawler:latest",
+      "command": ["python", "crawl.py"],
+      "volumes": [],
+      "environment": [],
+      "mountPoints": [],
+      "ulimits": [],
+      "exitCode": 0,
+      "containerInstanceArn": "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/...",
+      "taskArn": "arn:aws:ecs:ap-northeast-2:123456789012:task/..."
+    }
   }
 } 

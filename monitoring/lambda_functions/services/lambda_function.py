@@ -121,14 +121,33 @@ def handle_batch_event(event, context):
         
         slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
         
-        job_name = event['detail']['jobName']
-        job_status = event['detail']['status']
-        job_id = event['detail']['jobId']
+        detail = event['detail']
+        job_name = detail['jobName']
+        job_status = detail['status']
+        job_id = detail['jobId']
         
-        # 일반 로그는 기본 Lambda 로그 그룹으로
-        logging.info(f"Batch job status changed: {job_name} ({job_id}) -> {job_status}")
+        # 메트릭스 정보 추출
+        metrics = None
+        if 'attempts' in detail and detail['attempts']:
+            last_attempt = detail['attempts'][-1]
+            if 'container' in last_attempt:
+                metrics = last_attempt['container'].get('metrics', {})
         
-        job_details = get_batch_job_details(job_id)
+        if not metrics and 'container' in detail:
+            metrics = detail['container'].get('metrics', {})
+            
+        if metrics:
+            # 메트릭스 정보가 있으면 MonitoringDetails에 저장
+            monitoring_details.batch_metrics = {
+                job_id: {
+                    "total_processed": metrics.get('total_processed', 0),
+                    "success_count": metrics.get('success_count', 0),
+                    "fail_count": metrics.get('fail_count', 0),
+                    "extract_time": metrics.get('extract_time', 0),
+                    "transform_time": metrics.get('transform_time', 0),
+                    "load_time": metrics.get('load_time', 0)
+                }
+            }
         
         slack.send_batch_status(
             p_service_type=SERVICE_TYPE.DEV,
