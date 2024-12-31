@@ -1,13 +1,13 @@
-class MessageBlockBuilder:
+from typing import Dict, Any, List
+from datetime import datetime
+from .constant import ServiceType
+
+class MessageTemplate:
+    """메시지 템플릿 관리 클래스"""
+    
     @staticmethod
-    def create_error_blocks(service_type, error_msg, error_id, error_time):
-        # 에러 로그는 /aws/DEV/errors 사용
-        log_group_path = f"/aws/{service_type.name}/errors"
-        cloudwatch_url = (
-            f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?"
-            f"region=ap-northeast-2#logsV2:log-groups/log-group/{log_group_path}$3Ffilter$3DERROR{error_id}"
-        )
-        
+    def error_block(service_nm: str, error_time: str, error_msg: str, 
+                   error_id: str, cloudwatch_url: str) -> List[Dict[str, Any]]:
         return [
             {
                 "type": "header",
@@ -21,7 +21,7 @@ class MessageBlockBuilder:
                 "fields": [
                     {
                         "type": "mrkdwn",
-                        "text": f"*서비스:*\n{service_type.value[1]}"
+                        "text": f"*서비스:*\n{service_nm}"
                     },
                     {
                         "type": "mrkdwn",
@@ -62,13 +62,13 @@ class MessageBlockBuilder:
         ]
 
     @staticmethod
-    def create_batch_blocks(service_type, job_name, status, job_id):
-        status_emoji = "✅" if status == "SUCCEEDED" else "❌" if status == "FAILED" else "🔄"
-        # AWS Batch 콘솔 URL
-        batch_console_url = (
-            f"https://ap-northeast-2.console.aws.amazon.com/batch/home?"
-            f"region=ap-northeast-2#jobs/detail/{job_id}"
-        )
+    def batch_block(job_name: str, status: str, job_id: str, 
+                   batch_url: str) -> List[Dict[str, Any]]:
+        status_emoji = {
+            "SUCCEEDED": "✅",
+            "FAILED": "❌"
+        }.get(status, "🔄")
+        
         return [
             {
                 "type": "header",
@@ -91,26 +91,13 @@ class MessageBlockBuilder:
                 ]
             },
             {
-                "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*서비스:*\n{service_type.value[1]}"
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*작업 ID:*\n{job_id}"
-                    }
-                ]
-            },
-            {
                 "type": "actions",
                 "elements": [
                     {
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "처리 통계 보기"
+                            "text": "상세 정보 보기"
                         },
                         "action_id": "view_batch_detail",
                         "value": job_id
@@ -119,9 +106,9 @@ class MessageBlockBuilder:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "AWS Batch"
+                            "text": "Batch 콘솔"
                         },
-                        "url": batch_console_url,
+                        "url": batch_url,
                         "action_id": "view_batch_console"
                     }
                 ]
@@ -129,19 +116,15 @@ class MessageBlockBuilder:
         ]
 
     @staticmethod
-    def create_rag_blocks(service_type, accuracy, threshold, pipeline_id):
-        status_emoji = "✅" if accuracy >= threshold else "⚠️"
-        # Kubeflow UI URL
-        kubeflow_url = (
-            f"https://kubeflow.your-domain.com/pipeline/#/runs/details/{pipeline_id}"
-        )
-        
+    def rag_block(accuracy: float, threshold: float, 
+                 pipeline_id: str) -> List[Dict[str, Any]]:
+        status = "✅" if accuracy >= threshold else "⚠️"
         return [
             {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"{status_emoji} RAG 성능 측정 결과"
+                    "text": f"{status} RAG 성능 알림"
                 }
             },
             {
@@ -158,19 +141,6 @@ class MessageBlockBuilder:
                 ]
             },
             {
-                "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*서비스:*\n{service_type.value[1]}"
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*파이프라인 ID:*\n{pipeline_id}"
-                    }
-                ]
-            },
-            {
                 "type": "actions",
                 "elements": [
                     {
@@ -181,100 +151,51 @@ class MessageBlockBuilder:
                         },
                         "action_id": "view_rag_detail",
                         "value": pipeline_id
-                    },
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "Kubeflow"
-                        },
-                        "url": kubeflow_url,
-                        "action_id": "view_kubeflow"
                     }
                 ]
             }
         ]
 
-    @staticmethod
-    def create_error_detail_blocks(error_details):
-        return [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "🔍 에러 상세 정보"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*스택 트레이스:*\n```{error_details['stack_trace']}```"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*관련 로그:*\n```{error_details['related_logs']}```"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*이전 발생 이력:*\n{error_details['error_history']}"
-                }
-            }
-        ]
+class MessageBlockBuilder:
+    """메시지 블록 생성 클래스"""
+    
+    @classmethod
+    def create_error_blocks(cls, service_type: ServiceType, error_msg: str, 
+                          error_id: str) -> List[Dict[str, Any]]:
+        return MessageTemplate.error_block(
+            service_nm=service_type.value.description,
+            error_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            error_msg=error_msg,
+            error_id=error_id,
+            cloudwatch_url=cls._get_cloudwatch_url(service_type, error_id)
+        )
+
+    @classmethod
+    def create_batch_blocks(cls, service_type: ServiceType, job_name: str,
+                          status: str, job_id: str) -> List[Dict[str, Any]]:
+        return MessageTemplate.batch_block(
+            job_name=job_name,
+            status=status,
+            job_id=job_id,
+            batch_url=cls._get_batch_url(job_id)
+        )
+
+    @classmethod
+    def create_rag_blocks(cls, service_type: ServiceType, accuracy: float,
+                         threshold: float, pipeline_id: str) -> List[Dict[str, Any]]:
+        return MessageTemplate.rag_block(
+            accuracy=accuracy,
+            threshold=threshold,
+            pipeline_id=pipeline_id
+        )
 
     @staticmethod
-    def create_batch_detail_blocks(batch_details):
-        return [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "🔍 배치 작업 상세 정보"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*처리 통계:*\n"
-                           f"• 총 처리 건수: {batch_details['total_processed']}\n"
-                           f"• 성공: {batch_details['success_count']}\n"
-                           f"• 실패: {batch_details['fail_count']}\n\n"
-                           f"*소요 시간:*\n"
-                           f"• 추출: {batch_details['extract_time']}초\n"
-                           f"• 변환: {batch_details['transform_time']}초\n"
-                           f"• 적재: {batch_details['load_time']}초"
-                }
-            }
-        ]
+    def _get_cloudwatch_url(service_type: ServiceType, error_id: str) -> str:
+        log_group = service_type.value.log_group
+        return (f"https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home?"
+                f"region=ap-northeast-2#logsV2:log-groups/log-group/{log_group}")
 
     @staticmethod
-    def create_rag_detail_blocks(rag_details):
-        return [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "🔍 RAG 성능 상세 정보"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*성능 지표:*\n"
-                           f"• Precision: {rag_details['precision']}\n"
-                           f"• Recall: {rag_details['recall']}\n"
-                           f"• F1 Score: {rag_details['f1_score']}\n"
-                           f"• MRR: {rag_details['mrr']}\n\n"
-                           f"*실패한 쿼리:*\n{rag_details['failed_queries']}\n\n"
-                           f"*개선 제안사항:*\n{rag_details['improvement_suggestions']}"
-                }
-            }
-        ] 
+    def _get_batch_url(job_id: str) -> str:
+        return (f"https://ap-northeast-2.console.aws.amazon.com/batch/home?"
+                f"region=ap-northeast-2#jobs/detail/{job_id}") 
