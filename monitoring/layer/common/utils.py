@@ -2,8 +2,8 @@ import os
 import boto3
 import logging
 from datetime import datetime
-from kubernetes import client
 from .constant import SLACK_TOKENS 
+import time
 
 def __set_environ(p_slack_token:SLACK_TOKENS):
     ssm = boto3.client('ssm')
@@ -29,6 +29,14 @@ def get_cloudwatch_logs(log_group: str, query: str, start_time: int, end_time: i
     """CloudWatch 로그 조회 유틸리티"""
     try:
         logs_client = boto3.client('cloudwatch-logs')
+        
+        # 에러 로그 조회인 경우
+        if "ERROR" in query:
+            log_group = "/aws/DEV/errors"
+        # 그 외의 경우 기본 Lambda 로그 그룹 사용
+        elif not log_group:
+            log_group = "/aws/lambda/DEV-monitoring"
+            
         response = logs_client.filter_log_events(
             logGroupName=log_group,
             filterPattern=query,
@@ -52,18 +60,9 @@ def get_batch_job_details(job_id: str) -> dict:
         logging.error(f"Batch 작업 정보 조회 실패: {str(e)}")
         return {}
 
-def get_rag_metrics(pipeline_run_id: str, k8s_client: client.CustomObjectsApi) -> dict:
-    """RAG 파이프라인 메트릭 조회"""
+def get_rag_metrics(metrics: dict) -> dict:
+    """RAG 파이프라인 메트릭 처리"""
     try:
-        pipeline_run = k8s_client.get_namespaced_custom_object(
-            group="pipelines.kubeflow.org",
-            version="v1beta1",
-            namespace="kubeflow",
-            plural="pipelineruns",
-            name=pipeline_run_id
-        )
-        
-        metrics = pipeline_run.get('status', {}).get('metrics', {})
         return {
             'accuracy': float(metrics.get('accuracy', 0)),
             'precision': float(metrics.get('precision', 0)),
@@ -72,17 +71,47 @@ def get_rag_metrics(pipeline_run_id: str, k8s_client: client.CustomObjectsApi) -
             'mrr': float(metrics.get('mrr', 0))
         }
     except Exception as e:
-        logging.error(f"RAG 메트릭 조회 실패: {str(e)}")
+        logging.error(f"RAG 메트릭 조리 실패: {str(e)}")
         return {}
 
 def format_error_message(error_msg: str, service_name: str) -> dict:
-    """에러 메시지 포맷팅"""
-    return {
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'service': service_name,
-        'error': error_msg,
-        'severity': 'ERROR'
-    }
+    """에러 메시지 포맷팅 및 에러 로그 그룹에 기록"""
+    try:
+        logs_client = boto3.client('logs')
+        log_group = "/aws/DEV/errors"
+        timestamp = int(time.time() * 1000)
+        
+        formatted_msg = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'service': service_name,
+            'error': error_msg,
+            'severity': 'ERROR'
+        }
+        
+        try:
+            logs_client.put_log_events(
+                logGroupName=log_group,
+                logStreamName=f"error-{service_name}-{timestamp}",
+                logEvents=[{
+                    'timestamp': timestamp,
+                    'message': f"ERROR {service_name} {error_msg}"
+                }]
+            )
+        except logs_client.exceptions.ResourceNotFoundException:
+            logs_client.create_log_stream(
+                logGroupName=log_group,
+                logStreamName=f"error-{service_name}-{timestamp}"
+            )
+            
+        return formatted_msg
+    except Exception as e:
+        logging.error(f"에러 메시지 포맷팅 실패: {str(e)}")
+        return {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'service': service_name,
+            'error': error_msg,
+            'severity': 'ERROR'
+        }
 
 def put_monitoring_metrics(namespace: str, metric_name: str, value: float, dimensions: list) -> None:
     """CloudWatch 메트릭 기록"""

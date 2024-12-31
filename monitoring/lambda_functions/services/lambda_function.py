@@ -1,225 +1,269 @@
 import json
 import logging
 import boto3
-from datetime import datetime
-from kubernetes import client, config
-from slack_sdk.web import WebClient
 from common.sns_slack import SlackAlarm
 from common.constant import SLACK_CHANNELS, SERVICE_TYPE
 from common.utils import get_batch_job_details, get_rag_metrics, format_error_message
 from common.slack_bot import MonitoringBot
 from common.monitoring_details import MonitoringDetails
+import urllib.parse
+import time
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# 상단에 상수 추가
+RAG_THRESHOLD = 0.7  # RAG 성능 임계값
 
-def format_sns_message(title, message, channel, color="#36a64f"):
-    """SNS 메시지 포맷 생성"""
-    return {
-        "channel": channel,
-        "attachments": [
-            {
-                "color": color,
-                "title": title,
-                "text": message,
-                "footer": f"Monitoring Alert • {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                "fields": [
-                    {
-                        "title": "Service",
-                        "value": SERVICE_TYPE.DEV,
-                        "short": True
-                    }
-                ]
-            }
-        ]
-    }
-
-def error_handler(event, context):
-    """에러 로그 모니터링 핸들러"""
-    try:
-        sns = boto3.client('sns')
-        cloudwatch = boto3.client('cloudwatch')
-        slack_alarm = SlackAlarm(SLACK_CHANNELS.ERROR, MonitoringDetails(cloudwatch, None, None))
+class LambdaMonitoringHandler:
+    def __init__(self):
+        self.cloudwatch = boto3.client('cloudwatch')
         
-        error_msg = event['detail']['errorMessage']
-        error_id = f"{context.function_name}_{context.aws_request_id}"
-        
-        # CloudWatch에 에러 메트릭 추가
-        cloudwatch.put_metric_data(
-            Namespace='CustomMetrics/Errors',
-            MetricData=[{
-                'MetricName': 'ErrorCount',
-                'Value': 1,
-                'Unit': 'Count',
-                'Dimensions': [
-                    {'Name': 'FunctionName', 'Value': context.function_name}
-                ]
-            }]
+    def setup_monitoring(self, batch_client=None):
+        return MonitoringDetails(
+            cloudwatch_client=boto3.client('logs'),
+            batch_client=batch_client,
+            cloudwatch_metrics_client=self.cloudwatch
         )
-        
-        # Slack으로 직접 에러 알림 전송
-        slack_alarm.send_error_alert(SERVICE_TYPE.DEV, error_msg, error_id)
-        
-        # SNS로도 알림 전송
-        message = format_sns_message(
-            title="🚨 Error Alert",
-            message=f"*Error ID:* {error_id}\n*Error Message:* {error_msg}",
-            channel=SLACK_CHANNELS.ERROR,
-            color="#ff0000"
-        )
-        
-        sns.publish(
-            TopicArn=context.env.get('ERROR_TOPIC_ARN'),
-            Message=json.dumps(message)
-        )
-        
-        logger.info(f"Error notification sent: {error_id}")
-        return {"statusCode": 200}
-        
-    except Exception as e:
-        logger.error(f"Error in error_handler: {str(e)}")
+    
+    def handle_response(self, message):
+        return {
+            'statusCode': 200,
+            'body': json.dumps(message)
+        }
+    
+    def handle_error(self, e, function_name):
+        logging.error(f"Error in {function_name}: {str(e)}")
         raise
 
-def batch_monitor(event, context):
-    """Batch 작업 모니터링 핸들러"""
+def handle_monitoring_error(func_name: str, error: Exception) -> dict:
+    logging.error(f"Error in {func_name}: {str(error)}")
+    return {
+        "statusCode": 500,
+        "body": json.dumps({
+            "error": str(error),
+            "message": "처리 중 오류가 발생했습니다."
+        })
+    }
+
+def handler(event, context):
+    """통합된 Lambda 핸들러"""
     try:
-        sns = boto3.client('sns')
+        logging.info(f"Received event: {event}")
+        
+        # SNS를 통한 이벤트 처리
+        if 'Records' in event:
+            record = event['Records'][0]
+            if record.get('EventSource') == 'aws:sns':
+                message = json.loads(record['Sns']['Message'])
+                
+                # SNS 토픽 ARN으로 이벤트 타입 구분
+                topic_arn = record['Sns'].get('TopicArn', '')
+                
+                if 'codepipeline' in topic_arn:
+                    return handle_codepipeline_event(message, context)
+                elif 'batch' in topic_arn:
+                    return handle_batch_event(message, context)
+                elif 'rag' in topic_arn:
+                    return handle_rag_event(message, context)
+                elif 'error' in topic_arn or 'AlarmDescription' in message:
+                    return handle_error_event(event, context)
+                else:
+                    raise ValueError(f"Unsupported SNS topic: {topic_arn}")
+        
+        # 직접 이벤트 처리
+        event_source = event.get('source', '')
+        
+        if 'body' in event:
+            return handle_slack_event(event, context)
+        elif event_source == 'aws.batch':
+            return handle_batch_event(event, context)
+        elif event_source == 'custom.rag':
+            return handle_rag_event(event, context)
+        else:
+            raise ValueError(f"Unsupported event source: {event_source}")
+            
+    except Exception as e:
+        return handle_monitoring_error("handler", e)
+
+def handle_slack_event(event, context):
+    """Slack 이벤트 처리"""
+    body = event.get("body", "")
+    
+    # URL 검증 요청 처리
+    try:
+        if isinstance(body, str):
+            body = json.loads(body)
+        if body.get("type") == "url_verification":
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"challenge": body.get("challenge", "")})
+            }
+    except json.JSONDecodeError:
+        pass
+    
+    # payload 파라미터 처리
+    if isinstance(body, str) and 'payload=' in body:
+        decoded_body = urllib.parse.unquote(body)
+        payload_json = decoded_body.split('payload=')[1]
+        body = json.loads(payload_json)
+    
+    bot = MonitoringBot(init_k8s=False)
+    return bot.handler.handle(event, context)
+
+def handle_batch_event(event, context):
+    """Batch 이벤트 처리"""
+    try:
         batch = boto3.client('batch')
-        slack_alarm = SlackAlarm(SLACK_CHANNELS.ALARM, MonitoringDetails(None, batch, None))
+        cloudwatch = boto3.client('cloudwatch')
+        monitoring_details = MonitoringDetails(
+            cloudwatch_client=None,
+            batch_client=batch,
+            cloudwatch_metrics_client=cloudwatch
+        )
+        
+        slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
         
         job_name = event['detail']['jobName']
         job_status = event['detail']['status']
         job_id = event['detail']['jobId']
         
-        # Slack으로 직접 Batch 상태 알림 전송
-        slack_alarm.send_batch_status(SERVICE_TYPE.DEV, job_name, job_status, job_id)
+        # 일반 로그는 기본 Lambda 로그 그룹으로
+        logging.info(f"Batch job status changed: {job_name} ({job_id}) -> {job_status}")
         
-        # SNS로도 알림 전송
-        job_details = batch.describe_jobs(jobs=[job_id])['jobs'][0]
-        status_colors = {
-            "SUCCEEDED": "#36a64f",
-            "FAILED": "#ff0000",
-            "RUNNING": "#3AA3E3"
-        }
+        job_details = get_batch_job_details(job_id)
         
-        message = format_sns_message(
-            title="📊 Batch Job Status",
-            message=f"*Job Name:* {job_name}\n*Status:* {job_status}\n*Job ID:* {job_id}\n*Container:* {job_details.get('container', {}).get('image', 'N/A')}",
-            channel=SLACK_CHANNELS.ALARM,
-            color=status_colors.get(job_status, "#808080")
+        slack.send_batch_status(
+            p_service_type=SERVICE_TYPE.DEV,
+            p_job_name=job_name,
+            p_status=job_status,
+            p_job_id=job_id
         )
-        
-        sns.publish(
-            TopicArn=context.env.get('BATCH_TOPIC_ARN'),
-            Message=json.dumps(message)
-        )
-        
-        logger.info(f"Batch status notification sent: {job_id}")
-        return {"statusCode": 200}
-        
-    except Exception as e:
-        logger.error(f"Error in batch_monitor: {str(e)}")
-        raise
-
-def rag_monitor(event, context):
-    """RAG 성능 모니터링 핸들러"""
-    try:
-        sns = boto3.client('sns')
-        cloudwatch = boto3.client('cloudwatch')
-        
-        pipeline_metrics = event['detail']['metrics']
-        accuracy = float(pipeline_metrics['accuracy'])
-        threshold = float(event['detail']['threshold'])
-        pipeline_id = event['detail']['pipelineRunId']
-        
-        # CloudWatch에 RAG 성능 메트릭 기록
-        cloudwatch.put_metric_data(
-            Namespace='CustomMetrics/RAG',
-            MetricData=[{
-                'MetricName': 'Accuracy',
-                'Value': accuracy,
-                'Unit': 'Percent',
-                'Dimensions': [
-                    {'Name': 'PipelineId', 'Value': pipeline_id}
-                ]
-            }]
-        )
-        
-        performance_status = "✅ Pass" if accuracy >= threshold else "❌ Fail"
-        color = "#36a64f" if accuracy >= threshold else "#ff0000"
-        
-        message = format_sns_message(
-            title="🎯 RAG Performance Report",
-            message=(
-                f"*Pipeline ID:* {pipeline_id}\n"
-                f"*Accuracy:* {accuracy:.2f}\n"
-                f"*Threshold:* {threshold}\n"
-                f"*Status:* {performance_status}"
-            ),
-            channel=SLACK_CHANNELS.ALARM,
-            color=color
-        )
-        
-        sns.publish(
-            TopicArn=context.env.get('RAG_TOPIC_ARN'),
-            Message=json.dumps(message)
-        )
-        
-        logger.info(f"RAG performance notification sent: {pipeline_id}")
-        return {"statusCode": 200}
-        
-    except Exception as e:
-        logger.error(f"Error in rag_monitor: {str(e)}")
-        raise
-
-def sns_slack_handler(event, context):
-    """SNS에서 Slack으로 메시지 전달 핸들러"""
-    try:
-        message = json.loads(event['Records'][0]['Sns']['Message'])
-        cloudwatch = boto3.client('cloudwatch')
-        batch = boto3.client('batch')
-        k8s_client = config.new_client_from_config()
-        
-        monitoring_details = MonitoringDetails(cloudwatch, batch, None, k8s_client)
-        slack_alarm = SlackAlarm(message.get('channel'), monitoring_details)
-        
-        # 메시지 타입에 따라 적절한 SlackAlarm 메서드 호출
-        if "Error Alert" in message['attachments'][0]['title']:
-            error_id = message['attachments'][0]['text'].split('Error ID:')[1].split('\n')[0].strip()
-            error_msg = message['attachments'][0]['text'].split('Error Message:')[1].strip()
-            slack_alarm.send_error_alert(SERVICE_TYPE.DEV, error_msg, error_id)
-            
-        elif "Batch Job Status" in message['attachments'][0]['title']:
-            job_info = message['attachments'][0]['text']
-            job_name = job_info.split('Job Name:')[1].split('\n')[0].strip()
-            job_status = job_info.split('Status:')[1].split('\n')[0].strip()
-            job_id = job_info.split('Job ID:')[1].split('\n')[0].strip()
-            slack_alarm.send_batch_status(SERVICE_TYPE.DEV, job_name, job_status, job_id)
-            
-        elif "RAG Performance" in message['attachments'][0]['title']:
-            pipeline_info = message['attachments'][0]['text']
-            pipeline_id = pipeline_info.split('Pipeline ID:')[1].split('\n')[0].strip()
-            accuracy = float(pipeline_info.split('Accuracy:')[1].split('\n')[0].strip())
-            threshold = float(pipeline_info.split('Threshold:')[1].split('\n')[0].strip())
-            slack_alarm.send_rag_performance(SERVICE_TYPE.DEV, accuracy, threshold, pipeline_id)
-        
-        logger.info("Message sent to Slack successfully")
-        return {"statusCode": 200}
-        
-    except Exception as e:
-        logger.error(f"Error in sns_slack_handler: {str(e)}")
-        raise
-
-def chatbot_handler(event, context):
-    """Slack 챗봇 명령어 처리 핸들러"""
-    try:
-        bot = MonitoringBot()
-        bot.start()
         
         return {
             'statusCode': 200,
-            'body': json.dumps('Chatbot started successfully')
+            'body': json.dumps('Batch status notification sent successfully')
         }
     except Exception as e:
-        logger.error(f"Error in chatbot_handler: {str(e)}")
-        raise e
+        # 에러는 /aws/DEV/errors로 전송
+        error_msg = f"Batch monitoring error: {str(e)}"
+        logs_client = boto3.client('logs')
+        log_group = "/aws/DEV/errors"
+        
+        try:
+            logs_client.put_log_events(
+                logGroupName=log_group,
+                logStreamName=f"batch-error-{int(time.time())}",
+                logEvents=[{
+                    'timestamp': int(time.time() * 1000),
+                    'message': f"ERROR BATCH_MONITOR {error_msg}"
+                }]
+            )
+        except Exception as log_error:
+            logging.error(f"Failed to write to error log: {str(log_error)}")
+        
+        raise
+
+def handle_rag_event(event, context):
+    """RAG 성능 모니터링 이벤트 처리"""
+    cloudwatch = boto3.client('cloudwatch')
+    monitoring_details = MonitoringDetails(
+        cloudwatch_client=None,
+        batch_client=None,
+        cloudwatch_metrics_client=cloudwatch
+    )
+    
+    slack = SlackAlarm(SLACK_CHANNELS.ALARM, monitoring_details)
+    
+    metrics = get_rag_metrics(event['detail']['metrics'])
+    threshold = float(event['detail']['threshold'])
+    pipeline_id = event['detail']['pipelineRunId']
+    
+    slack.send_rag_performance(
+        p_service_type=SERVICE_TYPE.DEV,
+        p_accuracy=metrics['accuracy'],
+        p_threshold=threshold,
+        p_pipeline_id=pipeline_id
+    )
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('RAG performance notification sent successfully')
+    }
+
+def handle_error_event(event, context):
+    """에러 알림 이벤트 처리"""
+    handler = LambdaMonitoringHandler()
+    
+    try:
+        sup_event = json.loads(event['Records'][0]['Sns']['Message'])
+        alarm_description = sup_event['AlarmDescription']
+        
+        # AlarmDescription 파싱 ("ERROR error_id message" 형식)
+        parts = alarm_description.split(' ', 2)  # 최대 2번 split
+        if len(parts) >= 3 and parts[0] == 'ERROR':
+            error_id = parts[1]
+            error_msg = parts[2]
+        else:
+            # 기존 방식으로 폴백
+            error_msg = alarm_description
+            error_id = sup_event['Trigger']['Dimensions'][0]['value']
+        
+        service = SERVICE_TYPE.DEV
+        
+        # CloudWatch Logs 클라이언트 생성
+        logs_client = boto3.client('logs')
+        log_group = f"/aws/{service.name}/errors"
+        
+        # 로그 이벤트 직접 전송
+        try:
+            logs_client.put_log_events(
+                logGroupName=log_group,
+                logStreamName=f"error-{error_id}",
+                logEvents=[{
+                    'timestamp': int(time.time() * 1000),
+                    'message': f"ERROR {error_id} {error_msg}"  # 형식 통일
+                }]
+            )
+        except logs_client.exceptions.ResourceNotFoundException:
+            logs_client.create_log_stream(
+                logGroupName=log_group,
+                logStreamName=f"error-{error_id}"
+            )
+        
+        slack = SlackAlarm(
+            p_slack_channel=SLACK_CHANNELS.ERROR,
+            monitoring_details=handler.setup_monitoring()
+        )
+        
+        if not slack.get_ts_of_service_message(p_service_nm=service.name):
+            logging.info("send message to slack!!")
+            slack.send_service_message(p_service_type=service)
+        
+        logging.info("send error message to slack!!")
+        slack.send_error_alert(
+            p_service_type=service,
+            p_error_msg=error_msg,
+            p_error_id=error_id,
+            p_log_group=log_group
+        )
+        
+        return handler.handle_response('Error notification sent successfully')
+        
+    except KeyError as ke:
+        logging.error(f"Invalid event format: {ke}")
+        raise Exception(f"Invalid event format: {ke}")
+
+def handle_rag_metrics(event, context):
+    """Kubeflow에서 실행된 RAG 파이프라인의 성능 지표를 처리"""
+    pipeline_id = event['pipeline_id']
+    metrics = event['metrics']  # Precision, Recall, F1, MRR 등
+    
+    if metrics['accuracy'] < RAG_THRESHOLD:
+        slack_alarm = SlackAlarm(
+            SLACK_CHANNELS.ALARM,
+            MonitoringDetails()
+        )
+        slack_alarm.send_rag_performance(
+            SERVICE_TYPE.DEV,
+            metrics['accuracy'],
+            RAG_THRESHOLD,
+            pipeline_id
+        )
