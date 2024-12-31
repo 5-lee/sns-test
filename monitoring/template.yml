@@ -30,6 +30,7 @@ Globals:
     Tags:
       ServiceType: !Sub ${ServiceType}
       DefaultName: !Sub ${DefaultName}
+    AutoPublishAlias: !Ref StageType
 
 Resources:
   # Layer
@@ -63,111 +64,91 @@ Resources:
       DisplayName: !Sub ${ServiceType}-${DefaultName}-rag-notifications
       TopicName: !Sub ${ServiceType}-${DefaultName}-rag-topic
 
-  # CloudWatch Log Group
-  ErrorLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/${ServiceType}/errors'
-      RetentionInDays: 30
-
-  # EventBridge Rules로 변경
-  ErrorMonitoringRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - aws.cloudwatch.logs
-        detail-type:
-          - CloudWatch Log Alarm
-        detail:
-          status:
-            - ALARM
-      State: ENABLED
-      Targets:
-        - Arn: !Ref ErrorNotificationTopic
-          Id: ErrorNotification
-
-  BatchJobMonitoringRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - aws.batch
-        detail-type:
-          - "Batch Job State Change"
-        detail:
-          status:
-            - FAILED
-            - STOPPED
-      State: ENABLED
-      Targets:
-        - Arn: !Ref BatchNotificationTopic
-          Id: BatchJobNotification
-
-  RagPerformanceRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - custom.rag
-        detail-type:
-          - "RAG Performance Metric"
-        detail:
-          score:
-            - less-than: !Ref RagPerformanceThreshold
-      State: ENABLED
-      Targets:
-        - Arn: !Ref RagNotificationTopic
-          Id: RagNotification
-
-  # Lambda Function 수정
-  MonitoringFunction:
+  # Lambda Functions
+  ErrorHandlerFunction:
     Type: AWS::Serverless::Function
-    DependsOn: ErrorLogGroup
     Properties:
-      FunctionName: !Sub ${ServiceType}-monitoring
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-error-handler
       Role: !GetAtt MonitoringLambdaRole.Arn
-      CodeUri: lambda_functions/services
-      Handler: lambda_function.handler
+      CodeUri: services
+      Handler: lambda_function.error_handler
       Environment:
         Variables:
+          ERROR_TOPIC_ARN: !Ref ErrorNotificationTopic
           PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
+      Events:
+        CloudWatchErrorLog:
+          Type: CloudWatchLogs
+          Properties:
+            LogGroupName: /aws/applicationName/errors
+            FilterPattern: "ERROR"
+
+  BatchMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-batch-monitor
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.batch_monitor
+      Environment:
+        Variables:
+          BATCH_TOPIC_ARN: !Ref BatchNotificationTopic
+      Events:
+        BatchJobStateChange:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: ["aws.batch"]
+              detail-type: ["Batch Job State Change"]
+
+  RagMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-rag-monitor
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.rag_monitor
+      Environment:
+        Variables:
+          RAG_TOPIC_ARN: !Ref RagNotificationTopic
+          PERFORMANCE_THRESHOLD: !Ref RagPerformanceThreshold
+      Events:
+        KubeflowPipelineComplete:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: ["aws.kubeflow"]
+              detail-type: ["Pipeline Execution Completed"]
+
+  ChatbotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceType}-${DefaultName}-chatbot
+      Role: !GetAtt MonitoringLambdaRole.Arn
+      CodeUri: services
+      Handler: lambda_function.chatbot_handler
+      Environment:
+        Variables:
+          SLACK_APP_TOKEN: !Sub '{{resolve:ssm:/DEV/SNS/MUSEIFY/SLACK_APP_TOKEN}}'
       Events:
         SlackEvent:
           Type: Api
           Properties:
             Path: /slack/events
             Method: post
-        BatchJobStateChange:
-          Type: Schedule
-          Properties:
-            Schedule: rate(5 minutes)
-        CloudWatchErrorLog:
-          Type: CloudWatchLogs
-          Properties:
-            LogGroupName: !Sub '/aws/${ServiceType}/errors'
-            FilterPattern: 'ERROR'
-        RagPerformanceMonitor:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source:
-                - "custom.rag"
-      AutoPublishAlias: !Ref StageType
 
   # IAM Role
   MonitoringLambdaRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub lambda-${ServiceType}-${DefaultName}-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Principal:
-              Service: 
-                - "lambda.amazonaws.com"
-            Action:
-              - "sts:AssumeRole"
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
 
   # IAM Policy
   MonitoringLambdaPolicy:
@@ -177,161 +158,101 @@ Resources:
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "ssm:GetParameters"
-              - "ssm:GetParameter"
-            Resource: "*"
-          - Effect: "Allow"
-            Action:
-              - "logs:CreateLogGroup"
-              - "logs:CreateLogStream"
-              - "logs:PutLogEvents"
-              - "logs:DescribeLogGroups"
-              - "logs:DescribeLogStreams"
-              - "logs:FilterLogEvents"
-              - "logs:GetLogEvents"
-              - "logs:StartQuery"
-              - "logs:StopQuery"
-              - "logs:GetQueryResults"
-            Resource: 
-              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
-              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*:log-stream:*"
-          - Effect: "Allow"
-            Action:
-              - "apigateway:POST"
-              - "apigateway:GET"
-              - "apigateway:PUT"
-              - "apigateway:DELETE"
-              - "apigateway:PATCH"
-            Resource: "*"
-          - Effect: "Allow"
-            Action:
-              - "sns:Publish"
-              - "sns:Subscribe"
-            Resource: "*"
-          - Effect: "Allow"
-            Action:
-              - "batch:DescribeJobs"
-              - "batch:ListJobs"
+              - ssm:GetParameters
+              - ssm:GetParameter
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - cloudwatch:PutMetricData
+              - batch:DescribeJobs
+              - eks:DescribeCluster
+              - sns:Publish
             Resource: "*"
       Roles:
         - !Ref MonitoringLambdaRole
 
-  # SNS Topic Subscriptions
-  ErrorNotificationSubscription:
+  # CloudWatch Log Groups
+  ErrorHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ErrorHandlerFunction}
+      RetentionInDays: 30
+
+  BatchMonitorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${BatchMonitorFunction}
+      RetentionInDays: 30
+
+  RagMonitorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${RagMonitorFunction}
+      RetentionInDays: 30
+
+  ChatbotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ChatbotFunction}
+      RetentionInDays: 30
+
+  # CloudWatch Alarms
+  ErrorHandlerAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ServiceType}-${DefaultName}-error-handler-alarm
+      AlarmDescription: "Error Handler Lambda 오류 발생 시 알림"
+      AlarmActions:
+        - !Ref ErrorNotificationTopic
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ErrorHandlerFunction
+      EvaluationPeriods: 1
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+
+  BatchMonitorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ServiceType}-${DefaultName}-batch-monitor-alarm
+      AlarmDescription: "Batch Monitor Lambda 오류 발생 시 알림"
+      AlarmActions:
+        - !Ref BatchNotificationTopic
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref BatchMonitorFunction
+      EvaluationPeriods: 1
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+
+  # SNS Subscriptions
+  ErrorTopicSubscription:
     Type: AWS::SNS::Subscription
     Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
       TopicArn: !Ref ErrorNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt MonitoringFunction.Arn
 
-  ErrorInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref MonitoringFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref ErrorNotificationTopic
-
-  BatchNotificationSubscription:
+  BatchTopicSubscription:
     Type: AWS::SNS::Subscription
     Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
       TopicArn: !Ref BatchNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt MonitoringFunction.Arn
 
-  BatchInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref MonitoringFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref BatchNotificationTopic
-
-  RagNotificationSubscription:
+  RagTopicSubscription:
     Type: AWS::SNS::Subscription
     Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt ChatbotFunction.Arn
       TopicArn: !Ref RagNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt MonitoringFunction.Arn
-
-  RagInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref MonitoringFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref RagNotificationTopic
-
-  # CodePipeline SNS Topic 추가
-  CodePipelineNotificationTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      DisplayName: !Sub ${ServiceType}-${DefaultName}-codepipeline-notifications
-      TopicName: !Sub ${ServiceType}-${DefaultName}-codepipeline-topic
-
-  # CodePipeline EventBridge Rule
-  CodePipelineEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - aws.codepipeline
-        detail-type:
-          - CodePipeline Pipeline Execution State Change
-          - CodePipeline Stage Execution State Change
-          - CodePipeline Action Execution State Change
-        detail:
-          pipeline:
-            - ecs-museify-pipeline
-          state:
-            - FAILED
-            - STOPPED
-            - STARTED
-            - SUCCEEDED
-            - RESUMED
-            - CANCELED
-            - SUPERSEDED
-      State: ENABLED
-      Targets:
-        - Arn: !Ref CodePipelineNotificationTopic
-          Id: CodePipelineNotification
-
-  # CodePipeline 승인 대기 상태 모니터링
-  CodePipelineApprovalRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - aws.codepipeline
-        detail-type:
-          - CodePipeline Action Execution State Change
-        detail:
-          pipeline:
-            - ecs-museify-pipeline
-          type:
-            - Manual
-          state:
-            - STARTED
-      State: ENABLED
-      Targets:
-        - Arn: !Ref CodePipelineNotificationTopic
-          Id: CodePipelineApprovalNotification
-
-  # SNS Topic Subscription
-  CodePipelineNotificationSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref CodePipelineNotificationTopic
-      Protocol: lambda
-      Endpoint: !GetAtt MonitoringFunction.Arn
-
-  # Lambda Permission
-  CodePipelineInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref MonitoringFunction
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn: !Ref CodePipelineNotificationTopic

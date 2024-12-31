@@ -10,8 +10,8 @@ class SLACK_CHANNELS(enum.Enum):
     ERROR = (enum.auto(), "C084D1G6SJE", "오류")
 
 class SERVICE_TYPE(enum.Enum):
-    TEST = (enum.auto(), "[TEST] 테스트 환경")
-    DEV = (enum.auto(), "[DEV] 개발 환경")
+    TEST = (enum.auto(), "테스트용입니다.")
+    DEV = (enum.auto(), "개발용입니다.")
 
 class SLACK_ACTIONS(enum.Enum):
     VIEW_ERROR_DETAIL = "view_error_detail"

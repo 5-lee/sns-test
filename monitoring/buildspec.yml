@@ -1,27 +1,19 @@
 version: 0.2
 env:
-  git-credential-helper: yes
   variables:
-    PACKAGE_S3_BUCKET: museify-monitoring
+    PACKAGE_S3_BUCKET: 252-alram
 
 phases:
   install:
     runtime-versions:
       python: 3.11
     commands:
-      # Layer 의존성 설치
-      - cd monitoring/layer
-      - pip install -r requirements.txt -t python
-
-  pre_build:
-    commands:
-      - echo Build started on `date`
-      - cd ../..  # 루트 디렉토리로 이동
+      - pip install -r src/requirements.txt
 
   build:
     commands:
       - echo "Building SAM application..."
-      - sam build --template monitoring/template.yml 
+      - sam build --template template.yml
 
   post_build:
     commands:
